@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 from app.connectors.base import BaseConnector, JobDTO
 from app.models import Job, Source
 from app.services.dedup import compute_hash, is_duplicate
-
+from app.services.normalize import detect_country, detect_metier, detect_zone
 logger = logging.getLogger(__name__)
 
 
@@ -42,7 +42,9 @@ def save_jobs(session: Session, dtos: list[JobDTO], source_name: str) -> int:
         if is_duplicate(dto, known_triples):
             continue
 
-        from app.services.dedup import normalize
+            from app.services.dedup import normalize
+
+        country = detect_country(dto.location, hint=dto.country)
 
         session.add(
             Job(
@@ -52,7 +54,9 @@ def save_jobs(session: Session, dtos: list[JobDTO], source_name: str) -> int:
                 title_normalized=normalize(dto.title),
                 company=dto.company,
                 location=dto.location,
-                country=dto.country,
+                country=country,
+                zone=detect_zone(dto.location, country, dto.description),
+                metier=detect_metier(dto.title, dto.description),
                 contract_type=dto.contract_type,
                 description=dto.description,
                 url=dto.url,
