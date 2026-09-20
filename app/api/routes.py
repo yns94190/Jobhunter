@@ -10,6 +10,7 @@ from app.services.ingest import run_connector
 from app.services.backfill import backfill_zones_et_metiers
 from app.connectors.adzuna import AdzunaConnector
 from app.connectors.imap_alerts import ImapAlertsConnector
+from app.services.scoring import score_all
 router = APIRouter()
 
 
@@ -140,3 +141,8 @@ def stats(session: Session = Depends(get_session)) -> dict:
         "par_source": count_by(lambda j: sources.get(j.source_id, "?")),
         "par_statut": count_by(lambda j: j.status.value if hasattr(j.status, "value") else j.status),
     }
+
+@router.post("/admin/score")
+def run_scoring(only_new: bool = False, session: Session = Depends(get_session)) -> dict:
+    """Recalcule le score de toutes les offres."""
+    return score_all(session, only_new=only_new)

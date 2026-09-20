@@ -1,0 +1,95 @@
+# Pondérations du scoring. Total maximum : 100 points.
+# Modifiable sans toucher au code : rechargé à chaque calcul.
+
+mots_cles:
+  poids: 40
+  # Correspondance dans le titre de l'offre
+  forts:        # 100 % du poids
+    - technicien support
+    - support informatique
+    - helpdesk
+    - help desk
+    - technicien de proximite
+    - technicien proximite
+    - support utilisateur
+    - technicien informatique
+    - chauffeur livreur
+    - technicien reseau
+  moyens:       # 60 % du poids
+    - hotline
+    - service desk
+    - administrateur systeme
+    - maintenance informatique
+    - technicien it
+    - livreur
+    - technicien systeme
+    - assistance informatique
+  faibles:      # 30 % du poids
+    - informatique
+    - support
+    - technicien
+    - reseau
+    - chauffeur
+    - logistique
+
+zone:
+  poids: 20
+  bonus:
+    P1_IDF: 20
+    P2_FRONTALIER: 12
+    P3_FRANCE: 5
+    P4_SUISSE: 0
+    UNKNOWN: 0
+
+contrat:
+  poids: 15
+  bonus:
+    CDI: 15
+    permanent: 15
+    CDD: 10
+    contract: 10
+    alternance: 12
+    apprentissage: 12
+    MIS: 4        # intérim
+    interim: 4
+    temporary: 4
+    stage: 3
+
+fraicheur:
+  poids: 15
+  # Décroissance linéaire sur 14 jours : 15 pts aujourd'hui, 0 au-delà
+  jours: 14
+
+malus:
+  poids_max: 10
+  regles:
+    - motif: "5 ans"
+      points: 8
+    - motif: "5 annees"
+      points: 8
+    - motif: "3 ans d experience"
+      points: 4
+    - motif: "bac+5"
+      points: 8
+    - motif: "bac + 5"
+      points: 8
+    - motif: "master"
+      points: 6
+    - motif: "ingenieur diplome"
+      points: 6
+    - motif: "permis c"
+      points: 10      # tu as le permis B, pas le C
+    - motif: "permis ce"
+      points: 10
+    - motif: "spl"
+      points: 10
+    - motif: "poids lourd"
+      points: 8
+    - motif: "anglais courant"
+      points: 3
+    - motif: "confirme"
+      points: 4
+    - motif: "senior"
+      points: 6
+
+seuil_generation: 60
