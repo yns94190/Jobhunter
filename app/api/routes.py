@@ -10,7 +10,25 @@ from app.services.ingest import run_connector
 from app.services.backfill import backfill_zones_et_metiers
 from app.connectors.adzuna import AdzunaConnector
 from app.connectors.imap_alerts import ImapAlertsConnector
+from app.services.analytics import analytics, historique_offre
+from app.services.analytics import analytics, historique_offre
 from app.services.scoring import score_all
+from app.services.tracker import (
+    TrackerError,
+    jobs_a_relancer,
+    send_application,
+    update_draft,
+    update_status,
+)
+from pydantic import BaseModel
+from app.services.tracker import (
+    TrackerError,
+    jobs_a_relancer,
+    send_application,
+    update_draft,
+    update_status,
+)
+from pydantic import BaseModel
 from app.models import Application
 from app.services.generator import GeneratorError, generate_application, generate_batch
 router = APIRouter()
@@ -73,7 +91,16 @@ def list_jobs(
     # Tri final en Python : France d'abord à score égal
     jobs = sorted(jobs, key=lambda j: (-j.score, 0 if j.country == "FR" else 1))
 
-    return {"count": len(jobs), "items": jobs}
+    # On expose le nom de la source pour l'affichage des badges
+    sources = {s.id: s.name for s in session.exec(select(Source)).all()}
+    items = []
+    for job in jobs:
+        data = job.model_dump()
+        data["source_name"] = sources.get(job.source_id, "inconnue")
+        data["has_draft"] = job.status != JobStatus.NEW
+        items.append(data)
+
+    return {"count": len(items), "items": items}
 
 
 @router.get("/jobs/{job_id}")
@@ -184,3 +211,152 @@ def run_generate_batch(
 ) -> dict:
     """Génère les candidatures des meilleures offres non encore traitées."""
     return generate_batch(session, min_score=min_score, limit=limit)
+
+class DraftUpdate(BaseModel):
+    """Corrections apportees par l'utilisateur a un brouillon."""
+
+    subject: str
+    cover_letter: str
+
+
+class SendRequest(BaseModel):
+    to_email: str | None = None
+
+
+@router.patch("/jobs/{job_id}/status")
+def set_status(
+    job_id: int,
+    status: JobStatus,
+    session: Session = Depends(get_session),
+) -> Job:
+    """Change le statut d'une offre : postule, relance, entretien, refuse."""
+    job = session.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Offre introuvable")
+    return update_status(session, job, status)
+
+
+@router.put("/jobs/{job_id}/draft")
+def save_draft(
+    job_id: int,
+    payload: DraftUpdate,
+    session: Session = Depends(get_session),
+) -> Application:
+    """Enregistre les corrections manuelles du brouillon (nouvelle version)."""
+    if not session.get(Job, job_id):
+        raise HTTPException(status_code=404, detail="Offre introuvable")
+    try:
+        return update_draft(session, job_id, payload.subject, payload.cover_letter)
+    except TrackerError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/jobs/{job_id}/send")
+def send_job_application(
+    job_id: int,
+    payload: SendRequest | None = None,
+    session: Session = Depends(get_session),
+) -> dict:
+    """Envoie la candidature par mail. Declenche par l'utilisateur uniquement."""
+    job = session.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Offre introuvable")
+    try:
+        return send_application(session, job, payload.to_email if payload else None)
+    except TrackerError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/relances")
+def list_relances(session: Session = Depends(get_session)) -> list[dict]:
+    """Offres postulees depuis plus de 10 jours sans reponse."""
+    return jobs_a_relancer(session)
+
+
+class DraftUpdate(BaseModel):
+    """Corrections apportees par l'utilisateur a un brouillon."""
+
+    subject: str
+    cover_letter: str
+
+
+class SendRequest(BaseModel):
+    to_email: str | None = None
+
+
+@router.patch("/jobs/{job_id}/status")
+def set_status(
+    job_id: int,
+    status: JobStatus,
+    session: Session = Depends(get_session),
+) -> Job:
+    """Change le statut d'une offre : postule, relance, entretien, refuse."""
+    job = session.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Offre introuvable")
+    return update_status(session, job, status)
+
+
+@router.put("/jobs/{job_id}/draft")
+def save_draft(
+    job_id: int,
+    payload: DraftUpdate,
+    session: Session = Depends(get_session),
+) -> Application:
+    """Enregistre les corrections manuelles du brouillon (nouvelle version)."""
+    if not session.get(Job, job_id):
+        raise HTTPException(status_code=404, detail="Offre introuvable")
+    try:
+        return update_draft(session, job_id, payload.subject, payload.cover_letter)
+    except TrackerError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/jobs/{job_id}/send")
+def send_job_application(
+    job_id: int,
+    payload: SendRequest | None = None,
+    session: Session = Depends(get_session),
+) -> dict:
+    """Envoie la candidature par mail. Declenche par l'utilisateur uniquement."""
+    job = session.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Offre introuvable")
+    try:
+        return send_application(session, job, payload.to_email if payload else None)
+    except TrackerError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/relances")
+def list_relances(session: Session = Depends(get_session)) -> list[dict]:
+    """Offres postulees depuis plus de 10 jours sans reponse."""
+    return jobs_a_relancer(session)
+
+
+@router.get("/analytics")
+def get_analytics(session: Session = Depends(get_session)) -> dict:
+    """Metriques de suivi : entonnoir, sources, activite hebdomadaire."""
+    return analytics(session)
+
+
+@router.get("/jobs/{job_id}/history")
+def get_history(job_id: int, session: Session = Depends(get_session)) -> list[dict]:
+    """Chronologie des changements de statut d'une offre."""
+    if not session.get(Job, job_id):
+        raise HTTPException(status_code=404, detail="Offre introuvable")
+    return historique_offre(session, job_id)
+
+
+@router.get("/analytics")
+def get_analytics(session: Session = Depends(get_session)) -> dict:
+    """Metriques de suivi : entonnoir, sources, activite hebdomadaire."""
+    return analytics(session)
+
+
+@router.get("/jobs/{job_id}/history")
+def get_history(job_id: int, session: Session = Depends(get_session)) -> list[dict]:
+    """Chronologie des changements de statut d'une offre."""
+    if not session.get(Job, job_id):
+        raise HTTPException(status_code=404, detail="Offre introuvable")
+    return historique_offre(session, job_id)

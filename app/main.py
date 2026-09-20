@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from sqlmodel import Session
 
 from app.api.routes import router
@@ -26,3 +27,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="JobHunter", version=settings.app_version, lifespan=lifespan)
 app.include_router(router)
+
+@app.get("/", include_in_schema=False)
+def dashboard() -> FileResponse:
+    """Sert la page unique du tableau de bord."""
+    return FileResponse("frontend/index.html")

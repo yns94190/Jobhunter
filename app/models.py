@@ -122,3 +122,6 @@ class Profile(SQLModel, table=True):
     licences: list = Field(default_factory=list, sa_column=Column(JSON))
     sample_letters: list = Field(default_factory=list, sa_column=Column(JSON))
     updated_at: datetime = Field(default_factory=utcnow)
+
+
+from app.models_history import StatusHistory  # noqa: F401,E402

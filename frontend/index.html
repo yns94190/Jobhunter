@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="fr" :class="dark && 'dark'">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>JobHunter</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config = { darkMode: 'class' }</script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  [x-cloak] { display: none !important; }
+  body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  .dark ::-webkit-scrollbar-thumb { background: #475569; }
+</style>
+</head>
+<body x-data="jobhunter()" x-init="init()" :class="dark && 'dark'">
+<div class="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">
+
+<div class="flex">
+
+  <aside class="hidden lg:flex flex-col w-60 shrink-0 h-screen sticky top-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800">
+    <button @click="selectTab('home')" class="px-5 py-5 flex items-center gap-2.5 hover:opacity-80 transition text-left w-full">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 grid place-items-center text-white font-bold">J</div>
+      <div>
+        <div class="font-semibold leading-tight">JobHunter</div>
+        <div class="text-[11px] text-slate-400">Yanis Flitti</div>
+      </div>
+    </button>
+
+    <nav class="px-3 space-y-0.5 mt-2">
+      <template x-for="tab in tabs" :key="tab.id">
+        <button @click="selectTab(tab.id)"
+          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition"
+          :class="activeTab === tab.id
+            ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 font-medium'
+            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'">
+          <span x-text="tab.icon" class="text-base"></span>
+          <span x-text="tab.label"></span>
+          <span class="ml-auto text-[11px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800"
+            x-text="tabCount(tab.id)"></span>
+        </button>
+      </template>
+    </nav>
+
+    <div class="px-3 mt-6">
+      <div class="text-[11px] uppercase tracking-wider text-slate-400 px-3 mb-2">Suivi</div>
+      <button @click="filters.status = 'applied'; load()"
+        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">
+        <span>📮</span><span>Candidatures</span>
+        <span class="ml-auto text-[11px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800" x-text="stats.par_statut?.applied || 0"></span>
+      </button>
+      <button @click="showRelances()"
+        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">
+        <span>🔔</span><span>À relancer</span>
+        <span class="ml-auto text-[11px] px-1.5 py-0.5 rounded-md"
+          :class="relances.length ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' : 'bg-slate-100 dark:bg-slate-800'"
+          x-text="relances.length"></span>
+      </button>
+    </div>
+
+    <div class="mt-auto p-3 space-y-2">
+      <button @click="dark = !dark; localStorage.setItem('jh_dark', dark)"
+        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">
+        <span x-text="dark ? '☀️' : '🌙'"></span>
+        <span x-text="dark ? 'Mode clair' : 'Mode sombre'"></span>
+      </button>
+    </div>
+  </aside>
+
+  <div class="flex-1 min-w-0">
+
+    <header class="sticky top-0 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+      <div class="px-4 lg:px-6 py-3.5 flex items-center gap-3 flex-wrap">
+        <div class="lg:hidden font-semibold">JobHunter</div>
+        <div class="hidden lg:block">
+          <h1 class="text-lg font-semibold" x-text="currentTab().label"></h1>
+          <p class="text-xs text-slate-400" x-text="jobs.length + ' offres affichées'"></p>
+        </div>
+
+        <input type="search" x-model="search" @input.debounce.300ms="load()"
+          placeholder="Rechercher un poste, une société..."
+          class="flex-1 min-w-[180px] max-w-md px-3.5 py-2 text-sm rounded-xl bg-slate-100 dark:bg-slate-800 border border-transparent focus:border-indigo-400 focus:bg-white dark:focus:bg-slate-900 outline-none transition">
+
+        <div class="ml-auto flex gap-2">
+          <button @click="dark = !dark; localStorage.setItem('jh_dark', dark)"
+            class="lg:hidden px-3 py-2 text-sm rounded-xl bg-slate-100 dark:bg-slate-800"
+            x-text="dark ? '☀️' : '🌙'"></button>
+          <button @click="rescore()" :disabled="busy"
+            class="px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">
+            Recalculer
+          </button>
+          <button @click="refresh()" :disabled="busy"
+            class="px-3.5 py-2 text-sm rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium disabled:opacity-50 shadow-sm shadow-indigo-600/20">
+            <span x-show="!busy">Collecter</span>
+            <span x-show="busy" x-cloak>...</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="lg:hidden px-4 pb-3 flex gap-1.5 overflow-x-auto">
+        <template x-for="tab in tabs" :key="tab.id">
+          <button @click="selectTab(tab.id)"
+            class="px-3 py-1.5 text-sm rounded-lg whitespace-nowrap transition"
+            :class="activeTab === tab.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'"
+            x-text="tab.label"></button>
+        </template>
+      </div>
+    </header>
+
+    <main class="px-4 lg:px-6 py-5 space-y-5">
+
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <template x-for="kpi in kpis()" :key="kpi.label">
+          <button @click="applyKpi(kpi)"
+            class="text-left bg-white dark:bg-slate-900 rounded-2xl p-4 border transition hover:shadow-md"
+            :class="filters.status === kpi.status && kpi.status !== ''
+              ? 'border-indigo-400 dark:border-indigo-500 ring-2 ring-indigo-100 dark:ring-indigo-500/20'
+              : 'border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700'">
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="text-2xl font-bold" x-text="kpi.value"></div>
+                <div class="text-xs text-slate-400 mt-0.5" x-text="kpi.label"></div>
+              </div>
+              <div class="w-9 h-9 rounded-xl grid place-items-center text-base" :class="kpi.bg" x-text="kpi.icon"></div>
+            </div>
+            <div class="text-[11px] mt-2" :class="filters.status === kpi.status && kpi.status !== '' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'"
+              x-text="filters.status === kpi.status && kpi.status !== '' ? 'Filtre actif — cliquer pour retirer' : kpi.hint"></div>
+          </button>
+        </template>
+      </div>
+
+      <div class="flex gap-2 flex-wrap items-center text-sm" x-show="!['stats','home'].includes(activeTab)">
+        <select x-model="filters.metier" @change="load()"
+          class="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 outline-none">
+          <option value="">Tous les métiers</option>
+          <option value="support">💻 Support</option>
+          <option value="polyvalent">🔧 Réseau / système</option>
+          <option value="livreur">🚚 Livreur</option>
+          <option value="autre">📋 Autre</option>
+        </select>
+
+        <select x-model="filters.status" @change="load()"
+          class="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 outline-none">
+          <option value="">Tous les statuts</option>
+          <option value="new">Nouvelle</option>
+          <option value="drafted">Brouillon prêt</option>
+          <option value="applied">Postulé</option>
+          <option value="followed_up">Relancé</option>
+          <option value="interview">Entretien</option>
+          <option value="rejected">Refusé</option>
+        </select>
+
+        <div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <span class="text-slate-400 text-xs">Score ≥</span>
+          <input type="range" x-model.number="filters.min_score" @change="load()" min="0" max="90" step="5" class="w-24 accent-indigo-600">
+          <span class="font-medium w-6 text-center" x-text="filters.min_score"></span>
+        </div>
+
+        <button @click="resetFilters()"
+          class="px-3 py-2 rounded-xl transition"
+          :class="filtersActive() ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300 font-medium' : 'text-slate-500 hover:bg-white dark:hover:bg-slate-900'">
+          <span x-show="filtersActive()">⚠ </span>Réinitialiser
+        </button>
+      </div>
+
+      <div x-show="activeTab === 'home'" x-cloak class="space-y-5">
+
+        <div class="bg-gradient-to-br from-indigo-600 to-violet-600 rounded-2xl p-6 text-white">
+          <h2 class="text-xl font-semibold" x-text="greeting()"></h2>
+          <p class="text-indigo-100 text-sm mt-1" x-text="homeSummary()"></p>
+          <div class="flex gap-2 mt-4 flex-wrap">
+            <button @click="refresh()" :disabled="busy"
+              class="px-4 py-2 text-sm rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur font-medium disabled:opacity-50">
+              Collecter les nouvelles offres
+            </button>
+            <button @click="selectTab('stats')"
+              class="px-4 py-2 text-sm rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur font-medium">
+              Voir les statistiques
+            </button>
+          </div>
+        </div>
+
+        <div class="grid lg:grid-cols-2 gap-4">
+
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
+            <div class="flex items-center gap-2 mb-1">
+              <h2 class="font-semibold">À traiter</h2>
+              <span class="px-2 py-0.5 rounded-md text-[11px] bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
+                x-text="(stats.par_statut?.drafted || 0) + ' brouillons'"></span>
+            </div>
+            <p class="text-xs text-slate-400 mb-4">Candidatures rédigées, à relire avant envoi</p>
+
+            <div class="space-y-2">
+              <template x-for="job in home.drafts" :key="job.id">
+                <button @click="openDraft(job)"
+                  class="w-full text-left p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 transition">
+                  <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-lg grid place-items-center text-xs font-bold shrink-0" :class="scoreClass(job.score)" x-text="job.score"></span>
+                    <div class="min-w-0 flex-1">
+                      <div class="text-sm font-medium truncate" x-text="job.title"></div>
+                      <div class="text-xs text-slate-400 truncate" x-text="(job.company || '') + ' · ' + (job.location || '')"></div>
+                    </div>
+                    <span class="text-slate-300 shrink-0">→</span>
+                  </div>
+                </button>
+              </template>
+              <p x-show="home.drafts.length === 0" class="text-sm text-slate-400 py-6 text-center">
+                Aucun brouillon en attente
+              </p>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
+            <div class="flex items-center gap-2 mb-1">
+              <h2 class="font-semibold">Meilleures opportunités</h2>
+              <span class="px-2 py-0.5 rounded-md text-[11px] bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">score ≥ 75</span>
+            </div>
+            <p class="text-xs text-slate-400 mb-4">Offres non encore traitées, les mieux notées</p>
+
+            <div class="space-y-2">
+              <template x-for="job in home.top" :key="job.id">
+                <button @click="openDraft(job)"
+                  class="w-full text-left p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 transition">
+                  <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-lg grid place-items-center text-xs font-bold shrink-0" :class="scoreClass(job.score)" x-text="job.score"></span>
+                    <div class="min-w-0 flex-1">
+                      <div class="text-sm font-medium truncate" x-text="job.title"></div>
+                      <div class="flex items-center gap-1.5 mt-0.5">
+                        <span class="px-1.5 py-0.5 rounded text-[10px]" :class="sourceBadge(job.source_name).cls" x-text="sourceBadge(job.source_name).label"></span>
+                        <span class="text-xs text-slate-400 truncate" x-text="job.location || ''"></span>
+                      </div>
+                    </div>
+                    <span class="text-slate-300 shrink-0">→</span>
+                  </div>
+                </button>
+              </template>
+              <p x-show="home.top.length === 0" class="text-sm text-slate-400 py-6 text-center">
+                Toutes les meilleures offres ont été traitées
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5"
+          x-show="relances.length > 0">
+          <div class="flex items-center gap-2 mb-1">
+            <h2 class="font-semibold">À relancer</h2>
+            <span class="px-2 py-0.5 rounded-md text-[11px] bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+              x-text="relances.length + ' en attente'"></span>
+          </div>
+          <p class="text-xs text-slate-400 mb-4">Candidatures sans réponse depuis plus de 10 jours</p>
+          <div class="space-y-2">
+            <template x-for="r in relances" :key="r.job_id">
+              <div class="flex items-center gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20">
+                <div class="min-w-0 flex-1">
+                  <div class="text-sm font-medium truncate" x-text="r.title"></div>
+                  <div class="text-xs text-slate-500" x-text="(r.company || '') + ' · postulé il y a ' + r.jours + ' jours'"></div>
+                </div>
+                <button @click="markFollowedUp(r.job_id)"
+                  class="px-3 py-1.5 text-xs rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium shrink-0">
+                  Marquer relancé
+                </button>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
+          <h2 class="font-semibold mb-4">Sources actives</h2>
+          <div class="flex flex-wrap gap-2">
+            <template x-for="[src, n] in Object.entries(stats.par_source || {})" :key="src">
+              <div class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded-md text-[11px] font-medium" :class="sourceBadge(src).cls" x-text="sourceBadge(src).label"></span>
+                <span class="text-sm font-medium" x-text="n"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <div x-show="activeTab === 'stats' && an" x-cloak class="space-y-5">
+
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
+          <h2 class="font-semibold mb-1">Entonnoir de conversion</h2>
+          <p class="text-xs text-slate-400 mb-4">Où s'arrête le parcours de tes candidatures</p>
+          <div class="space-y-3">
+            <template x-for="etape in an.funnel" :key="etape.etape">
+              <div>
+                <div class="flex justify-between text-sm mb-1">
+                  <span x-text="etape.etape"></span>
+                  <span class="text-slate-400"><span class="font-medium text-slate-700 dark:text-slate-200" x-text="etape.valeur"></span> <span x-text="'(' + etape.taux + '%)'"></span></span>
+                </div>
+                <div class="h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                  <div class="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all"
+                    :style="'width:' + barWidth(etape.valeur, an.funnel[0].valeur)"></div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div class="grid lg:grid-cols-2 gap-4">
+
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
+            <h2 class="font-semibold mb-1">Performance par source</h2>
+            <p class="text-xs text-slate-400 mb-4">Volume et qualité de chaque connecteur</p>
+            <div class="space-y-3">
+              <template x-for="s in an.par_source" :key="s.source">
+                <div>
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="px-2 py-0.5 rounded-md text-[11px] font-medium" :class="sourceBadge(s.source).cls" x-text="sourceBadge(s.source).label"></span>
+                    <span class="ml-auto text-sm font-medium" x-text="s.offres"></span>
+                  </div>
+                  <div class="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <div class="h-full rounded-full bg-indigo-500" :style="'width:' + barWidth(s.offres, maxOf(an.par_source, 'offres'))"></div>
+                  </div>
+                  <div class="flex gap-3 mt-1 text-[11px] text-slate-400">
+                    <span x-text="'Score moyen ' + s.score_moyen"></span>
+                    <span x-text="s.taux_pertinence + '% pertinentes'"></span>
+                    <span x-show="s.postulees" x-text="s.postulees + ' postulées'"></span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
+            <h2 class="font-semibold mb-1">Activité hebdomadaire</h2>
+            <p class="text-xs text-slate-400 mb-4">Candidatures envoyées et entretiens obtenus</p>
+            <div class="flex items-end gap-2 h-40">
+              <template x-for="s in an.activite" :key="s.semaine">
+                <div class="flex-1 flex flex-col items-center gap-1 h-full justify-end">
+                  <div class="w-full flex flex-col justify-end gap-0.5 h-full">
+                    <div class="w-full rounded-t bg-amber-400" x-show="s.entretiens"
+                      :style="'height:' + barWidth(s.entretiens, Math.max(1, maxOf(an.activite, 'postulees')))"></div>
+                    <div class="w-full rounded-t bg-indigo-500"
+                      :style="'height:' + barWidth(s.postulees, Math.max(1, maxOf(an.activite, 'postulees')))"></div>
+                  </div>
+                  <span class="text-[10px] text-slate-400" x-text="s.semaine"></span>
+                </div>
+              </template>
+            </div>
+            <div class="flex gap-4 mt-3 text-[11px] text-slate-400">
+              <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded bg-indigo-500"></span>Candidatures</span>
+              <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded bg-amber-400"></span>Entretiens</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid lg:grid-cols-2 gap-4">
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
+            <h2 class="font-semibold mb-4">Répartition par zone</h2>
+            <div class="space-y-2.5">
+              <template x-for="[zone, n] in Object.entries(an.par_zone)" :key="zone">
+                <div class="flex items-center gap-3">
+                  <span class="text-sm w-28 shrink-0" x-text="zoneLabel(zone) || zone"></span>
+                  <div class="flex-1 h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <div class="h-full rounded-full bg-violet-500" :style="'width:' + barWidth(n, Math.max(...Object.values(an.par_zone)))"></div>
+                  </div>
+                  <span class="text-sm font-medium w-12 text-right" x-text="n"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
+            <h2 class="font-semibold mb-4">Répartition par métier</h2>
+            <div class="space-y-2.5">
+              <template x-for="[metier, n] in Object.entries(an.par_metier)" :key="metier">
+                <div class="flex items-center gap-3">
+                  <span class="text-sm w-28 shrink-0 capitalize" x-text="metier"></span>
+                  <div class="flex-1 h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <div class="h-full rounded-full bg-emerald-500" :style="'width:' + barWidth(n, Math.max(...Object.values(an.par_metier)))"></div>
+                  </div>
+                  <span class="text-sm font-medium w-12 text-right" x-text="n"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div x-show="busy" class="py-16 text-center text-slate-400 text-sm">Chargement...</div>
+
+      <div x-show="!busy && !['stats','home'].includes(activeTab)" class="space-y-2.5">
+        <template x-for="job in jobs" :key="job.id">
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 hover:border-indigo-300 dark:hover:border-indigo-700 transition group">
+            <div class="flex gap-4 items-start flex-wrap sm:flex-nowrap">
+
+              <div class="w-12 h-12 rounded-xl grid place-items-center font-bold text-sm shrink-0"
+                :class="scoreClass(job.score)">
+                <span x-text="job.score"></span>
+              </div>
+
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <h3 class="font-semibold truncate" x-text="job.title"></h3>
+                  <span class="px-2 py-0.5 rounded-md text-[11px] font-medium shrink-0"
+                    :class="sourceBadge(job.source_name).cls"
+                    x-text="sourceBadge(job.source_name).label"></span>
+                </div>
+
+                <div class="flex items-center gap-2.5 mt-1 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
+                  <span x-text="job.company || 'Société non précisée'"></span>
+                  <span>·</span>
+                  <span x-text="job.location || '-'"></span>
+                  <span x-show="job.contract_type">·</span>
+                  <span x-show="job.contract_type" class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800" x-text="job.contract_type"></span>
+                  <span x-show="job.country === 'CH'" class="px-1.5 py-0.5 rounded bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400">🇨🇭 Frontalier</span>
+                </div>
+
+                <div class="flex items-center gap-2 mt-2">
+                  <span class="px-2 py-0.5 rounded-md text-[11px]" :class="statusBadge(job.status).cls" x-text="statusBadge(job.status).label"></span>
+                  <span class="text-[11px] text-slate-400" x-text="zoneLabel(job.zone)"></span>
+                  <span class="text-[11px] text-slate-400" x-show="job.published_at" x-text="timeAgo(job.published_at)"></span>
+                </div>
+              </div>
+
+              <div class="flex gap-2 shrink-0 w-full sm:w-auto">
+                <button @click="openDraft(job)"
+                  class="flex-1 sm:flex-none px-3.5 py-2 text-sm rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium">
+                  Candidature
+                </button>
+                <a :href="job.url" target="_blank" rel="noopener"
+                  class="flex-1 sm:flex-none px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-center"
+                  :title="'Ouvrir sur ' + sourceBadge(job.source_name).label">
+                  Ouvrir ↗
+                </a>
+                <select :value="job.status" @change="setStatus(job, $event.target.value)"
+                  class="px-2 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none">
+                  <option value="new">Nouvelle</option>
+                  <option value="drafted">Brouillon</option>
+                  <option value="applied">Postulé</option>
+                  <option value="followed_up">Relancé</option>
+                  <option value="interview">Entretien</option>
+                  <option value="rejected">Refusé</option>
+                  <option value="ignored">Ignoré</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <div x-show="jobs.length === 0" class="py-16 text-center">
+          <div class="text-4xl mb-2">🔍</div>
+          <p class="text-slate-400 text-sm">Aucune offre pour ces filtres</p>
+          <button @click="resetFilters()" class="mt-3 text-sm text-indigo-600 hover:underline">Réinitialiser les filtres</button>
+        </div>
+      </div>
+
+      <div class="flex gap-2 items-center justify-center pt-2" x-show="!busy && jobs.length > 0 && !['stats','home'].includes(activeTab)">
+        <button @click="page > 0 && (page--, load())" :disabled="page === 0"
+          class="px-4 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40">←</button>
+        <span class="text-sm text-slate-400" x-text="'Page ' + (page + 1)"></span>
+        <button @click="page++; load()" :disabled="jobs.length < limit"
+          class="px-4 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40">→</button>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div x-show="modal.open" x-cloak
+  class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 flex items-start justify-center p-4 overflow-y-auto"
+  @click.self="modal.open = false" @keydown.escape.window="modal.open = false">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-3xl w-full my-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-start gap-4">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <h2 class="font-semibold truncate" x-text="modal.job?.title"></h2>
+          <span class="px-2 py-0.5 rounded-md text-[11px] font-medium shrink-0"
+            :class="sourceBadge(modal.job?.source_name).cls"
+            x-text="sourceBadge(modal.job?.source_name).label"></span>
+        </div>
+        <p class="text-sm text-slate-500 truncate" x-text="(modal.job?.company || '') + ' · ' + (modal.job?.location || '')"></p>
+      </div>
+      <button @click="modal.open = false" class="ml-auto w-8 h-8 rounded-lg grid place-items-center text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
+    </div>
+
+    <div class="px-5 py-4 space-y-4">
+      <div x-show="modal.loading" class="py-10 text-center">
+        <div class="text-sm text-slate-500">Génération de la candidature...</div>
+      </div>
+      <div x-show="modal.error" class="text-sm text-red-600 bg-red-50 dark:bg-red-500/10 rounded-xl px-3.5 py-2.5" x-text="modal.error"></div>
+
+      <template x-if="!modal.loading && modal.draft">
+        <div class="space-y-4">
+          <div class="flex items-center gap-3 text-xs flex-wrap">
+            <span class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800" x-text="'Version ' + modal.draft.version"></span>
+            <span class="px-2 py-1 rounded-lg"
+              :class="(modal.draft.confidence_score || 0) >= 0.8 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'"
+              x-text="'Confiance ' + Math.round((modal.draft.confidence_score || 0) * 100) + '%'"></span>
+            <span class="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800" x-text="modal.draft.variant === 'CH' ? '🇨🇭 Format suisse' : '🇫🇷 Format français'"></span>
+            <button @click="regenerate()" class="ml-auto text-indigo-600 hover:underline">↻ Régénérer</button>
+          </div>
+
+          <div class="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl px-3.5 py-2.5 text-xs text-amber-800 dark:text-amber-300">
+            Brouillon généré automatiquement. Relisez et corrigez avant tout envoi : le modèle peut inventer des détails.
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1.5">Objet du mail</label>
+            <input type="text" x-model="modal.draft.subject"
+              class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-indigo-400 outline-none">
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium mb-1.5">Lettre de motivation</label>
+            <textarea x-model="modal.draft.cover_letter" rows="16"
+              class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-indigo-400 outline-none leading-relaxed"></textarea>
+          </div>
+
+
+          <div x-show="history.length > 0" class="pt-2 border-t border-slate-200 dark:border-slate-800">
+            <p class="text-sm font-medium mb-2">Historique</p>
+            <div class="space-y-1.5">
+              <template x-for="h in history" :key="h.quand">
+                <div class="flex items-center gap-2 text-xs">
+                  <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span>
+                  <span class="px-1.5 py-0.5 rounded" :class="statusBadge(h.de).cls" x-text="statusBadge(h.de).label" x-show="h.de"></span>
+                  <span class="text-slate-400" x-show="h.de">→</span>
+                  <span class="px-1.5 py-0.5 rounded" :class="statusBadge(h.vers).cls" x-text="statusBadge(h.vers).label"></span>
+                  <span class="ml-auto text-slate-400" x-text="formatDate(h.quand)"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div x-show="modal.draft.key_points?.length">
+            <p class="text-sm font-medium mb-1.5">Points clés</p>
+            <div class="flex flex-wrap gap-1.5">
+              <template x-for="p in modal.draft.key_points" :key="p">
+                <span class="px-2.5 py-1 rounded-lg text-xs bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300" x-text="p"></span>
+              </template>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <div class="px-5 py-4 border-t border-slate-200 dark:border-slate-800 flex gap-2 flex-wrap items-center" x-show="modal.draft">
+      <button @click="saveDraft()" :disabled="modal.saving"
+        class="px-4 py-2.5 text-sm rounded-xl bg-slate-800 dark:bg-slate-700 text-white font-medium hover:bg-slate-900 disabled:opacity-50">
+        Enregistrer mes corrections
+      </button>
+      <button @click="sendMail()" :disabled="modal.saving || !modal.job?.contact_email"
+        class="px-4 py-2.5 text-sm rounded-xl bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-40"
+        :title="modal.job?.contact_email || 'Aucune adresse de contact'">
+        Envoyer par mail
+      </button>
+      <a :href="modal.job?.url" target="_blank" rel="noopener"
+        class="px-4 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800">
+        Postuler sur le site ↗
+      </a>
+      <span class="text-xs text-emerald-600" x-show="modal.message" x-text="modal.message"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+function jobhunter() {
+  return {
+    jobs: [], stats: {}, relances: [], an: null, history: [], home: { drafts: [], top: [] },
+    busy: false, page: 0, limit: 40, search: '',
+    dark: localStorage.getItem('jh_dark') === 'true',
+    activeTab: 'home',
+    filters: { metier: '', status: '', min_score: 60 },
+    modal: { open: false, job: null, draft: null, loading: false, saving: false, error: '', message: '' },
+
+    tabs: [
+      { id: 'home',       label: 'Accueil',    icon: '🏠' },
+      { id: 'france',     label: 'France',     icon: '🇫🇷' },
+      { id: 'frontalier', label: 'Frontalier', icon: '🤝' },
+      { id: 'suisse',     label: 'Suisse',     icon: '🇨🇭' },
+      { id: 'toutes',     label: 'Toutes',     icon: '📋' },
+      { id: 'stats',      label: 'Statistiques', icon: '📈' },
+    ],
+
+    async init() {
+      await this.loadStats();
+      await this.loadRelances();
+      await this.loadHome();
+    },
+
+    async loadHome() {
+      this.busy = true;
+      try {
+        const [d, t] = await Promise.all([
+          fetch('/jobs?status=drafted&min_score=0&limit=5').then(r => r.json()),
+          fetch('/jobs?status=new&min_score=75&limit=5').then(r => r.json()),
+        ]);
+        this.home = { drafts: d.items || [], top: t.items || [] };
+      } catch (e) { this.home = { drafts: [], top: [] }; }
+      this.busy = false;
+    },
+
+    currentTab() { return this.tabs.find(t => t.id === this.activeTab) || this.tabs[0]; },
+
+    tabCount(id) {
+      const z = this.stats.par_zone || {};
+      if (id === 'france')     return (z.P1_IDF || 0) + (z.P3_FRANCE || 0) + (z.P2_FRONTALIER || 0);
+      if (id === 'frontalier') return z.P2_FRONTALIER || 0;
+      if (id === 'suisse')     return z.P4_SUISSE || 0;
+      if (id === 'stats' || id === 'home') return '';
+      return this.stats.total || 0;
+    },
+
+    selectTab(id) {
+      this.activeTab = id;
+      this.page = 0;
+      this.filters.status = '';
+      this.search = '';
+      // La Suisse n'a pas de bonus de zone : son meilleur score plafonne plus bas
+      this.filters.min_score = (id === 'suisse') ? 40 : 60;
+      if (id === 'stats') { this.loadAnalytics(); return; }
+      if (id === 'home')  { this.loadHome(); return; }
+      this.load();
+    },
+
+    tabParams() {
+      if (this.activeTab === 'france')     return { country: 'FR' };
+      if (this.activeTab === 'frontalier') return { zone: 'P2_FRONTALIER' };
+      if (this.activeTab === 'suisse')     return { country: 'CH' };
+      return {};
+    },
+
+    kpis() {
+      const s = this.stats, st = s.par_statut || {};
+      return [
+        { label: 'Offres collectées', value: s.total || 0,      icon: '📊', bg: 'bg-indigo-50 dark:bg-indigo-500/15',   status: '',          hint: 'Voir toutes les offres' },
+        { label: 'Brouillons prêts',  value: st.drafted || 0,   icon: '✍️', bg: 'bg-violet-50 dark:bg-violet-500/15',   status: 'drafted',   hint: 'À relire et envoyer' },
+        { label: 'Candidatures',      value: st.applied || 0,   icon: '📮', bg: 'bg-emerald-50 dark:bg-emerald-500/15', status: 'applied',   hint: 'En attente de réponse' },
+        { label: 'Entretiens',        value: st.interview || 0, icon: '🎯', bg: 'bg-amber-50 dark:bg-amber-500/15',    status: 'interview', hint: 'Décrochés' },
+      ];
+    },
+
+    greeting() {
+      const h = new Date().getHours();
+      const m = h < 12 ? 'Bonjour' : (h < 18 ? 'Bon après-midi' : 'Bonsoir');
+      return m + ', Yanis';
+    },
+
+    homeSummary() {
+      const st = this.stats.par_statut || {};
+      const bits = [];
+      if (st.drafted) bits.push(`${st.drafted} brouillon${st.drafted > 1 ? 's' : ''} à relire`);
+      if (this.home.top.length) bits.push(`${this.home.top.length} offres à fort potentiel`);
+      if (this.relances.length) bits.push(`${this.relances.length} relance${this.relances.length > 1 ? 's' : ''} à faire`);
+      return bits.length ? bits.join(' · ') : `${this.stats.total || 0} offres en base, rien d'urgent`;
+    },
+
+    async markFollowedUp(jobId) {
+      await fetch(`/jobs/${jobId}/status?status=followed_up`, { method: 'PATCH' });
+      await this.loadRelances();
+      await this.loadStats();
+    },
+
+    applyKpi(kpi) {
+      // Un second clic sur le meme KPI retire le filtre
+      this.filters.status = (this.filters.status === kpi.status) ? '' : kpi.status;
+      // Ces vues doivent montrer toutes les offres concernees, quel que soit le score
+      if (kpi.status) { this.filters.min_score = 0; this.activeTab = 'toutes'; }
+      this.page = 0;
+      this.load();
+    },
+
+    async load() {
+      this.busy = true;
+      const p = new URLSearchParams({
+        min_score: this.filters.min_score,
+        limit: this.limit,
+        offset: this.page * this.limit,
+        ...this.tabParams(),
+      });
+      if (this.filters.metier) p.set('metier', this.filters.metier);
+      if (this.filters.status) p.set('status', this.filters.status);
+
+      try {
+        const res = await fetch('/jobs?' + p);
+        const data = await res.json();
+        let items = data.items || [];
+        // La recherche textuelle est appliquee cote client sur la page courante
+        if (this.search.trim()) {
+          const q = this.search.toLowerCase();
+          items = items.filter(j =>
+            (j.title || '').toLowerCase().includes(q) ||
+            (j.company || '').toLowerCase().includes(q) ||
+            (j.location || '').toLowerCase().includes(q));
+        }
+        this.jobs = items;
+      } catch (e) { this.jobs = []; }
+      this.busy = false;
+    },
+
+    async loadStats() {
+      try { this.stats = await (await fetch('/stats')).json(); } catch (e) {}
+    },
+
+    async loadAnalytics() {
+      this.busy = true;
+      try { this.an = await (await fetch('/analytics')).json(); } catch (e) { this.an = null; }
+      this.busy = false;
+    },
+
+    // Largeur de barre proportionnelle a la valeur max de la serie
+    barWidth(value, max) {
+      if (!max) return '0%';
+      return Math.max(2, Math.round(100 * value / max)) + '%';
+    },
+
+    maxOf(list, key) {
+      return list.reduce((m, x) => Math.max(m, x[key] || 0), 0);
+    },
+
+    async loadHistory(jobId) {
+      try { this.history = await (await fetch(`/jobs/${jobId}/history`)).json(); }
+      catch (e) { this.history = []; }
+    },
+
+    formatDate(iso) {
+      if (!iso) return '';
+      return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    },
+
+    async loadRelances() {
+      try { this.relances = await (await fetch('/relances')).json(); } catch (e) {}
+    },
+
+    showRelances() {
+      if (!this.relances.length) { alert('Aucune candidature à relancer pour le moment.'); return; }
+      alert('À relancer :\n\n' + this.relances.map(r => `• ${r.title} (${r.jours} jours)`).join('\n'));
+    },
+
+    filtersActive() {
+      return this.filters.metier !== '' || this.filters.status !== '' || this.search.trim() !== '';
+    },
+
+    resetFilters() {
+      this.filters = { metier: '', status: '', min_score: this.activeTab === 'suisse' ? 40 : 60 };
+      this.search = '';
+      this.page = 0;
+      this.load();
+    },
+
+    scoreClass(s) {
+      if (s >= 80) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300';
+      if (s >= 60) return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300';
+      if (s >= 40) return 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300';
+      return 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
+    },
+
+    sourceBadge(name) {
+      const map = {
+        france_travail: { label: 'France Travail', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' },
+        adzuna_fr:      { label: 'Adzuna FR',      cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' },
+        adzuna_ch:      { label: 'Adzuna CH',      cls: 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300' },
+        imap_linkedin:  { label: 'LinkedIn',       cls: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300' },
+        imap_indeed:    { label: 'Indeed',         cls: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300' },
+        imap_jobup:     { label: 'jobup.ch',       cls: 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300' },
+        imap_alerts:    { label: 'Alerte mail',    cls: 'bg-pink-100 text-pink-700 dark:bg-pink-500/15 dark:text-pink-300' },
+      };
+      return map[name] || { label: name || 'Autre', cls: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400' };
+    },
+
+    statusBadge(s) {
+      const map = {
+        new:         { label: 'Nouvelle',  cls: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400' },
+        drafted:     { label: 'Brouillon', cls: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300' },
+        applied:     { label: 'Postulé',   cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' },
+        followed_up: { label: 'Relancé',   cls: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' },
+        interview:   { label: 'Entretien', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' },
+        rejected:    { label: 'Refusé',    cls: 'bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-300' },
+        ignored:     { label: 'Ignoré',    cls: 'bg-slate-100 text-slate-400 dark:bg-slate-800' },
+      };
+      return map[s] || map.new;
+    },
+
+    zoneLabel(z) {
+      return { P1_IDF: 'Île-de-France', P2_FRONTALIER: 'Frontalier', P3_FRANCE: 'France', P4_SUISSE: 'Suisse' }[z] || '';
+    },
+
+    timeAgo(iso) {
+      const d = Math.floor((Date.now() - new Date(iso)) / 86400000);
+      if (d <= 0) return "aujourd'hui";
+      if (d === 1) return 'hier';
+      if (d < 7) return `il y a ${d} jours`;
+      if (d < 30) return `il y a ${Math.floor(d / 7)} sem.`;
+      return `il y a ${Math.floor(d / 30)} mois`;
+    },
+
+    async setStatus(job, status) {
+      await fetch(`/jobs/${job.id}/status?status=${status}`, { method: 'PATCH' });
+      job.status = status;
+      this.loadStats();
+      if (this.modal.open && this.modal.job?.id === job.id) this.loadHistory(job.id);
+    },
+
+    async openDraft(job) {
+      this.modal = { open: true, job, draft: null, loading: true, saving: false, error: '', message: '' };
+      this.loadHistory(job.id);
+      try {
+        const res = await fetch(`/jobs/${job.id}/generate`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'échec de génération');
+        this.modal.draft = data;
+        job.status = 'drafted';
+        this.loadStats();
+      } catch (e) { this.modal.error = e.message; }
+      this.modal.loading = false;
+    },
+
+    async regenerate() {
+      this.modal.loading = true; this.modal.error = ''; this.modal.message = '';
+      try {
+        const res = await fetch(`/jobs/${this.modal.job.id}/generate?force=true`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'échec de génération');
+        this.modal.draft = data;
+        this.modal.message = 'Nouvelle version générée';
+      } catch (e) { this.modal.error = e.message; }
+      this.modal.loading = false;
+    },
+
+    async saveDraft() {
+      this.modal.saving = true; this.modal.message = ''; this.modal.error = '';
+      try {
+        const res = await fetch(`/jobs/${this.modal.job.id}/draft`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subject: this.modal.draft.subject, cover_letter: this.modal.draft.cover_letter }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "échec d'enregistrement");
+        this.modal.draft = data;
+        this.modal.message = `Corrections enregistrées (v${data.version})`;
+      } catch (e) { this.modal.error = e.message; }
+      this.modal.saving = false;
+    },
+
+    async sendMail() {
+      if (!confirm(`Envoyer cette candidature à ${this.modal.job.contact_email} ?`)) return;
+      this.modal.saving = true; this.modal.error = '';
+      try {
+        const res = await fetch(`/jobs/${this.modal.job.id}/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "échec d'envoi");
+        this.modal.message = 'Envoyé à ' + data.sent_to;
+        this.modal.job.status = 'applied';
+        this.loadStats();
+      } catch (e) { this.modal.error = e.message; }
+      this.modal.saving = false;
+    },
+
+    async refresh() {
+      this.busy = true;
+      await fetch('/jobs/refresh', { method: 'POST' });
+      await this.loadStats();
+      await this.load();
+    },
+
+    async rescore() {
+      this.busy = true;
+      await fetch('/admin/score', { method: 'POST' });
+      await this.loadStats();
+      await this.load();
+    },
+  };
+}
+</script>
+</div>
+</body>
+</html>
