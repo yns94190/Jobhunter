@@ -9,6 +9,7 @@ from app.models import Job, JobStatus, Metier, Source, Zone
 from app.services.ingest import run_connector
 from app.services.backfill import backfill_zones_et_metiers
 from app.connectors.adzuna import AdzunaConnector
+from app.connectors.imap_alerts import ImapAlertsConnector
 router = APIRouter()
 
 
@@ -90,6 +91,7 @@ async def refresh_jobs(
         "france_travail": FranceTravailConnector,
         "adzuna_fr": lambda: AdzunaConnector(country="fr"),
         "adzuna_ch": lambda: AdzunaConnector(country="ch"),
+        "imap_alerts": ImapAlertsConnector,
     }
 
     if source:
