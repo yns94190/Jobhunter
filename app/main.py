@@ -11,6 +11,8 @@ from app.seed import seed
 
 logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger("jobhunter")
+# httpx journalise l'URL complète, clés API comprises : on le passe en WARNING
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 @asynccontextmanager

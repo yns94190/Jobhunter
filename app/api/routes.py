@@ -8,6 +8,7 @@ from app.db import get_session
 from app.models import Job, JobStatus, Metier, Source, Zone
 from app.services.ingest import run_connector
 from app.services.backfill import backfill_zones_et_metiers
+from app.connectors.adzuna import AdzunaConnector
 router = APIRouter()
 
 
@@ -80,10 +81,29 @@ def get_job(job_id: int, session: Session = Depends(get_session)) -> Job:
 
 
 @router.post("/jobs/refresh")
-async def refresh_jobs(session: Session = Depends(get_session)) -> dict:
-    """Déclenche une collecte sur les sources disponibles."""
-    inserted = await run_connector(session, FranceTravailConnector())
-    return {"inserted": inserted}
+async def refresh_jobs(
+    source: str | None = None,
+    session: Session = Depends(get_session),
+) -> dict:
+    """Déclenche une collecte. Sans paramètre, lance toutes les sources."""
+    connectors = {
+        "france_travail": FranceTravailConnector,
+        "adzuna_fr": lambda: AdzunaConnector(country="fr"),
+        "adzuna_ch": lambda: AdzunaConnector(country="ch"),
+    }
+
+    if source:
+        if source not in connectors:
+            raise HTTPException(status_code=404, detail=f"Connecteur inconnu : {source}")
+        selected = {source: connectors[source]}
+    else:
+        selected = connectors
+
+    results = {}
+    for name, factory in selected.items():
+        results[name] = await run_connector(session, factory())
+
+    return {"inserted": results, "total": sum(results.values())}
 
 
 @router.get("/sources")
