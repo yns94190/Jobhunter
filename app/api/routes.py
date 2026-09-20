@@ -11,6 +11,8 @@ from app.services.backfill import backfill_zones_et_metiers
 from app.connectors.adzuna import AdzunaConnector
 from app.connectors.imap_alerts import ImapAlertsConnector
 from app.services.scoring import score_all
+from app.models import Application
+from app.services.generator import GeneratorError, generate_application, generate_batch
 router = APIRouter()
 
 
@@ -146,3 +148,39 @@ def stats(session: Session = Depends(get_session)) -> dict:
 def run_scoring(only_new: bool = False, session: Session = Depends(get_session)) -> dict:
     """Recalcule le score de toutes les offres."""
     return score_all(session, only_new=only_new)
+
+@router.post("/jobs/{job_id}/generate")
+def generate_for_job(
+    job_id: int,
+    force: bool = False,
+    session: Session = Depends(get_session),
+) -> Application:
+    """(Re)génère le brouillon de candidature d'une offre."""
+    job = session.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Offre introuvable")
+
+    try:
+        return generate_application(session, job, force=force)
+    except GeneratorError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.get("/jobs/{job_id}/applications")
+def list_applications(job_id: int, session: Session = Depends(get_session)) -> list[Application]:
+    """Historique des brouillons d'une offre, le plus récent d'abord."""
+    return session.exec(
+        select(Application)
+        .where(Application.job_id == job_id)
+        .order_by(Application.version.desc())
+    ).all()
+
+
+@router.post("/admin/generate-batch")
+def run_generate_batch(
+    min_score: int = 60,
+    limit: int = Query(default=5, le=20),
+    session: Session = Depends(get_session),
+) -> dict:
+    """Génère les candidatures des meilleures offres non encore traitées."""
+    return generate_batch(session, min_score=min_score, limit=limit)

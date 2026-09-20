@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     imap_user: str | None = None
     imap_password: str | None = None
     anthropic_api_key: str | None = None
+    groq_api_key: str | None = None
+    llm_provider: str = "groq"  # "groq" ou "anthropic"
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_user: str | None = None
