@@ -52,3 +52,14 @@ def test_societes_differentes_ne_sont_pas_des_doublons():
 def test_titres_eloignes_ne_sont_pas_des_doublons():
     existing = [("Chauffeur livreur VL", "Acme", "Paris")]
     assert not is_duplicate(_dto("Administrateur systemes senior"), existing)
+
+def test_societe_manquante_meme_lieu_est_un_doublon():
+    existing = [("Technicien support informatique et exploitation", None, "75 - Paris 13e")]
+    dto = _dto("Technicien support informatique et exploitation", company="Unicancer", location="75 - Paris 13e")
+    assert is_duplicate(dto, existing)
+
+
+def test_societe_manquante_lieu_different_nest_pas_un_doublon():
+    existing = [("Technicien support informatique", None, "69 - Lyon")]
+    dto = _dto("Technicien support informatique", company="Acme", location="75 - Paris")
+    assert not is_duplicate(dto, existing)

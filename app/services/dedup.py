@@ -38,10 +38,19 @@ def is_duplicate(dto: JobDTO, existing: list[tuple[str, str | None, str | None]]
     candidate = normalize(dto.title)
     candidate_company = normalize(dto.company)
 
-    for title, company, _location in existing:
-        # La société doit correspondre : deux sociétés différentes ne sont jamais des doublons
-        if candidate_company and normalize(company) != candidate_company:
+    candidate_location = normalize(dto.location)
+
+    for title, company, location in existing:
+        existing_company = normalize(company)
+
+        if candidate_company and existing_company:
+            # Deux societes renseignees et differentes : jamais un doublon
+            if existing_company != candidate_company:
+                continue
+        elif normalize(location) != candidate_location:
+            # Une societe manquante : on exige alors le meme lieu pour conclure
             continue
+
         if fuzz.token_sort_ratio(candidate, normalize(title)) >= FUZZY_THRESHOLD:
             return True
 

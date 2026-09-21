@@ -20,7 +20,11 @@ class Settings(BaseSettings):
     imap_password: str | None = None
     anthropic_api_key: str | None = None
     groq_api_key: str | None = None
-    llm_provider: str = "groq"  # "groq" ou "anthropic"
+    llm_provider: str = "groq"
+    auth_user: str = "yanis"
+    auth_password: str | None = None
+    scheduler_enabled: bool = True
+    scheduler_interval_hours: int = 3  # "groq" ou "anthropic"
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_user: str | None = None
