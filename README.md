@@ -85,4 +85,4 @@ Toutes les données personnelles sont dans `profile.yaml`, jamais versionné :
 cp profile.example.yaml profile.yaml
 ~~~
 
-Chaque expérience porte un `domaine` (`it` ou `logistique`) : le générateur choisit automatiquement les expériences pertinentes selon le type d'offre. Le profil est resynchronisé en base à chaque démarrage.
+Chaque expérience porte un `domaine` (`it` ou `logistique`) : le générateur choisit automatiquement les expériences pertinentes selon le type d'offre. Le profil est resynchronisé en base à chaque démarrage. En production, `./sync-profile.sh` envoie le profil au serveur.
