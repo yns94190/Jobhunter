@@ -74,3 +74,13 @@ tests/
 ## Licence
 
 MIT
+
+## Profil candidat
+
+Toutes les données personnelles sont dans `profile.yaml`, jamais versionné :
+
+~~~bash
+cp profile.example.yaml profile.yaml
+~~~
+
+Chaque expérience porte un `domaine` (`it` ou `logistique`) : le générateur choisit automatiquement les expériences pertinentes selon le type d'offre. Le profil est resynchronisé en base à chaque démarrage.

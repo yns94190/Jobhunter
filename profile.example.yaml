@@ -1,0 +1,40 @@
+# Copier ce fichier en profile.yaml puis le remplir avec vos informations.
+# profile.yaml n'est jamais versionne.
+
+identite:
+  nom: Camille Martin
+  age: 22
+  localisation: Lyon
+  email: camille.martin@example.com
+  telephone: "06 00 00 00 00"
+
+formation: BTS SIO option SISR (Bac+2)
+
+competences:
+  - Support utilisateurs N1/N2
+  - Windows, Active Directory
+  - "Réseaux : TCP/IP, DNS, DHCP"
+
+permis_et_mobilite:
+  - Permis B
+  - Disponibilité immédiate
+
+# Facultatif : utilise uniquement pour les offres en Suisse
+candidature_suisse:
+  residence: en France, en zone frontalière
+  permis: un permis G (frontalier)
+
+# domaine = it ou logistique
+experiences:
+  - domaine: it
+    intitule: Technicien support (alternance)
+    structure: Entreprise Exemple
+    lieu: Lyon
+    periode: 09/2024 - 07/2026
+    missions: Support N1/N2, gestion des tickets, déploiement de postes.
+  - domaine: logistique
+    intitule: Préparateur de commandes
+    structure: Entrepôt Exemple
+    lieu: Lyon
+    periode: 06/2024 - 08/2024
+    missions: Préparation et contrôle des commandes, gestion de stock.

@@ -9,6 +9,7 @@ from sqlmodel import Session, select
 
 from app.config import settings
 from app.models import Application, Job, JobStatus, Profile
+from app.profile_config import load_profile
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ MODEL_GROQ = "openai/gpt-oss-120b"
 MAX_TOKENS = 8000
 MAX_DESCRIPTION_CHARS = 4000
 
-SYSTEM_PROMPT = """Tu rédiges des candidatures pour un jeune technicien informatique français.
+SYSTEM_PROMPT = """Tu rédiges des candidatures pour le candidat dont le profil est fourni.
 
 Règles absolues :
 - Tu réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ni après, sans balises Markdown.
@@ -41,11 +42,17 @@ Style de la lettre :\n- Tu écris les nombres en chiffres (600 tickets, 450 post
 - Tu relies concrètement une compétence du profil à un besoin de l'offre.\n- Tu sépares chaque paragraphe par une ligne vide (\\n\\n) et tu n'utilises ni espace insécable ni tiret conditionnel.\n- Tu sépares chaque paragraphe par une ligne vide (\\n\\n) et tu n'utilises ni espace insécable ni tiret conditionnel.
 - Tu assumes le profil junior : la formation récente et la disponibilité sont des atouts."""
 
-VARIANTE_CH = """
+def _variante_ch() -> str:
+    """Consignes pour les offres suisses, construites depuis profile.yaml."""
+    suisse = load_profile().get("candidature_suisse") or {}
+    residence = suisse.get("residence", "en France, en zone frontalière")
+    permis = suisse.get("permis", "un permis G (frontalier)")
+    return f"""
 Cette offre est en Suisse. Adapte la lettre :
 - Vouvoiement helvétique, ton plus formel qu'en France.
 - Formule d'appel : "Madame, Monsieur," / Formule finale : "Je vous adresse, Madame, Monsieur, mes salutations distinguées."
-- Mentionne que le candidat réside à Annemasse (Haute-Savoie), en zone frontalière, et demandera un permis G.\n- Ne mentionne PAS l'Île-de-France dans une lettre destinée à un employeur suisse.
+- Mentionne que le candidat réside {residence} et demandera {permis}.
+- Ne mentionne pas une région de résidence française éloignée de la Suisse.
 - Pas de "H/F" ni d'abréviations administratives françaises."""
 
 
@@ -149,17 +156,14 @@ def _call_llm(system: str, profile_text: str, job_text: str) -> tuple[str, str]:
 
 
 CONSIGNE_IT = """
-Ce poste est un poste informatique. Tu t'appuies UNIQUEMENT sur :
-- l'alternance de technicien support a l'ENSAM (support N1/N2, GLPI, Active Directory, SCCM, parc)
-- les stages informatiques (ENSAM 2023, ANCV 2022)
-- le projet reseau Cisco
-Tu ne mentionnes JAMAIS l'experience de livreur chez UPS : elle est hors sujet ici."""
+Ce poste relève de l'informatique. Tu t'appuies UNIQUEMENT sur les éléments du parcours marqués [IT].
+Tu ne mentionnes JAMAIS les éléments marqués [LOGISTIQUE] : ils sont hors sujet ici."""
 
 CONSIGNE_NON_IT = """
-Ce poste n'est pas un poste informatique (logistique, livraison, manutention, service).
-Tu mets en avant EN PREMIER l'experience de livreur chez UPS (tournees, chargement, delais, port de charges).
-Tu evoques ensuite l'alternance sous l'angle transferable : reception et inventaire de materiel,
-preparation et deplacement d'equipements, respect des procedures, relation avec les utilisateurs.
+Ce poste ne relève pas de l'informatique (logistique, livraison, manutention, service).
+Tu mets en avant EN PREMIER les éléments du parcours marqués [LOGISTIQUE].
+Tu évoques ensuite les éléments marqués [IT] sous l'angle transférable : réception et inventaire de matériel,
+préparation et déplacement d'équipements, respect des procédures, relation avec les utilisateurs.
 Tu restes SOBRE sur la technique informatique : elle n'est pas le sujet."""
 
 
@@ -179,7 +183,7 @@ def generate_application(session: Session, job: Job, force: bool = False) -> App
     variant = "CH" if job.country == "CH" else "FR"
     metier = job.metier.value if hasattr(job.metier, "value") else str(job.metier)
     consigne_metier = CONSIGNE_IT if metier in ("support", "polyvalent") else CONSIGNE_NON_IT
-    system = SYSTEM_PROMPT + consigne_metier + (VARIANTE_CH if variant == "CH" else "")
+    system = SYSTEM_PROMPT + consigne_metier + (_variante_ch() if variant == "CH" else "")
 
     try:
         raw, model_used = _call_llm(system, _build_profile_text(profile), _build_job_text(job))
