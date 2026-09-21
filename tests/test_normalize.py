@@ -94,3 +94,11 @@ def test_nom_ambigu_ailleurs_en_france():
     assert detect_zone("Beaumont, Puy-de-Dôme") != Zone.P2_FRONTALIER
     assert detect_zone("78 - Thoiry") == Zone.P1_IDF
     assert detect_zone("Megexpress") != Zone.P2_FRONTALIER
+
+
+def test_format_adzuna_commune_puis_arrondissement():
+    assert detect_zone("La Roche-sur-Foron, Bonneville") == Zone.P2_FRONTALIER
+    assert detect_zone("Annemasse, Saint-Julien-en-Genevois") == Zone.P2_FRONTALIER
+    assert detect_zone("Marignier, Bonneville") != Zone.P2_FRONTALIER
+    assert detect_zone("Thyez, Bonneville") != Zone.P2_FRONTALIER
+    assert detect_zone("Collonges, Gex") != Zone.P2_FRONTALIER

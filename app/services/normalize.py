@@ -51,12 +51,15 @@ def _extract_departement(location: str) -> str | None:
 
 def _est_frontalier(location: str | None, normalized: str) -> bool:
     """Commune frontaliere retenue ; les noms ambigus exigent le bon departement."""
-    if _contient_ville(normalized, VILLES_FRONTALIERES):
-        return True
     brut = location or ""
+    # Format Adzuna "Commune, Arrondissement" : seule la commune compte
+    # ("Marignier, Bonneville" est a Marignier, pas a Bonneville)
+    commune = normalize(brut.split(",")[0]) if "," in brut else normalized
+    if _contient_ville(commune, VILLES_FRONTALIERES):
+        return True
     departement = _extract_departement(brut)
     for ville, attendu in VILLES_FRONTALIERES_AMBIGUES.items():
-        if not re.search(rf"\b{re.escape(ville)}\b", normalized):
+        if not re.search(rf"\b{re.escape(ville)}\b", commune):
             continue
         if (departement == attendu
                 or re.search(rf"\b{attendu}\d{{3}}\b", brut)
