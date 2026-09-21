@@ -81,8 +81,8 @@
           <p class="text-xs text-slate-400" x-text="jobs.length + ' offres affichées'"></p>
         </div>
 
-        <input type="search" x-model="search" @input.debounce.300ms="load()"
-          placeholder="Rechercher un poste, une société..."
+        <input type="search" x-model="search" @input.debounce.300ms="page = 0; load()"
+          placeholder="Rechercher un poste, une société, une ville..."
           class="flex-1 min-w-[180px] max-w-md px-3.5 py-2 text-sm rounded-xl bg-slate-100 dark:bg-slate-800 border border-transparent focus:border-indigo-400 focus:bg-white dark:focus:bg-slate-900 outline-none transition">
 
         <div class="ml-auto flex gap-2">
@@ -724,21 +724,14 @@ function jobhunter() {
       if (this.filters.metier) p.set('metier', this.filters.metier);
       if (this.filters.status) p.set('status', this.filters.status);
       if (this.filters.age) p.set('max_age_days', this.filters.age);
+      if (this.search.trim()) p.set('q', this.search.trim());
       if (this.filters.age) p.set('max_age_days', this.filters.age);
+      if (this.search.trim()) p.set('q', this.search.trim());
 
       try {
         const res = await fetch('/jobs?' + p);
         const data = await res.json();
-        let items = data.items || [];
-        // La recherche textuelle est appliquee cote client sur la page courante
-        if (this.search.trim()) {
-          const q = this.search.toLowerCase();
-          items = items.filter(j =>
-            (j.title || '').toLowerCase().includes(q) ||
-            (j.company || '').toLowerCase().includes(q) ||
-            (j.location || '').toLowerCase().includes(q));
-        }
-        this.jobs = items;
+        this.jobs = data.items || [];
       } catch (e) { this.jobs = []; }
       this.busy = false;
     },

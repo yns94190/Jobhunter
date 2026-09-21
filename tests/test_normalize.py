@@ -70,3 +70,21 @@ def test_metier_inconnu():
 def test_repli_sur_la_description():
     metier = detect_metier("Poste polyvalent H/F", "Vous assurez le support utilisateur N1.")
     assert metier == Metier.SUPPORT
+
+def test_frontalier_limite_a_45_minutes():
+    assert detect_zone("74 - Annemasse") == Zone.P2_FRONTALIER
+    assert detect_zone("01 - Gex") == Zone.P2_FRONTALIER
+    assert detect_zone("74 - Thonon-les-Bains") == Zone.P2_FRONTALIER
+    assert detect_zone("25 - Pontarlier") == Zone.P2_FRONTALIER
+    assert detect_zone("39 - Les Rousses") == Zone.P2_FRONTALIER
+
+
+def test_departement_frontalier_mais_trop_loin():
+    assert detect_zone("74 - Chamonix-Mont-Blanc") == Zone.P3_FRANCE
+    assert detect_zone("01 - Bourg-en-Bresse") == Zone.P3_FRANCE
+    assert detect_zone("01 - Saint-Cyr-sur-Menthon") == Zone.P3_FRANCE
+
+
+def test_pas_de_faux_positif_sur_nom_ambigu():
+    assert detect_zone("Viry-Châtillon") != Zone.P2_FRONTALIER
+    assert detect_zone("Megexpress") != Zone.P2_FRONTALIER

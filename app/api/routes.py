@@ -58,6 +58,7 @@ def list_jobs(
     metier: Metier | None = None,
     status: JobStatus | None = None,
     country: str | None = None,
+    q: str | None = None,
     max_age_days: int | None = None,
     limit: int = Query(default=50, le=200),
     offset: int = 0,
@@ -99,7 +100,18 @@ def list_jobs(
         Job.country.asc(),  # "CH" < "FR" en ASCII, donc on inverse plus bas
         Job.published_at.desc(),
     )
-    jobs = session.exec(statement.offset(offset).limit(limit)).all()
+    if q and q.strip():
+        # Recherche insensible aux accents, sur l'intitule, la societe et la ville.
+        # Tous les mots doivent etre presents : "technicien geneve".
+        from app.services.dedup import normalize
+        mots = normalize(q).split()
+        candidats = session.exec(statement).all()
+        jobs = [
+            j for j in candidats
+            if all(m in normalize(f"{j.title} {j.company or ''} {j.location or ''}") for m in mots)
+        ][offset:offset + limit]
+    else:
+        jobs = session.exec(statement.offset(offset).limit(limit)).all()
 
     # Tri final en Python : France d'abord à score égal
     jobs = sorted(jobs, key=lambda j: (-j.score, 0 if j.country == "FR" else 1))
