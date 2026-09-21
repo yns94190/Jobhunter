@@ -1,0 +1,56 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparer l'environnement
+        run: |
+          touch .env
+          mkdir -p data
+
+      - name: Construire l'image
+        run: docker compose build -q
+
+      - name: Lancer les tests
+        run: docker compose run --rm api pytest -q
+
+  deploy:
+    name: Deploiement Oracle Cloud
+    needs: tests
+    # Jamais de deploiement depuis une pull request
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    # Deux deploiements ne tournent jamais en meme temps
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    steps:
+      - name: Configurer SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: Deployer
+        # La cle est bridee : le serveur execute scripts/remote-deploy.sh, quoi qu'on demande
+        run: ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
+
+      - name: Verifier la production
+        run: |
+          sleep 15
+          curl -fsS --retry 5 --retry-delay 5 "${{ secrets.HEALTH_URL }}"
