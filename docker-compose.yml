@@ -7,5 +7,4 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
-      - /app/data
     restart: unless-stopped
