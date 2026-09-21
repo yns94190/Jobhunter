@@ -1,5 +1,7 @@
 # JobHunter
 
+[![CI/CD](https://github.com/yns94190/Jobhunter/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/yns94190/Jobhunter/actions/workflows/ci-cd.yml)
+
 Agrégateur personnel d'offres d'emploi : collecte multi-sources, scoring selon le profil, génération de lettres de motivation par IA et suivi des candidatures.
 
 **Le système prépare, l'utilisateur valide.** Aucune candidature n'est jamais envoyée automatiquement.
