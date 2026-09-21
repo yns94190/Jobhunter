@@ -13,9 +13,9 @@ permissions:
 jobs:
   tests:
     name: Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Preparer l'environnement
         run: |
@@ -33,7 +33,7 @@ jobs:
     needs: tests
     # Jamais de deploiement depuis une pull request
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Deux deploiements ne tournent jamais en meme temps
     concurrency:
       group: production
