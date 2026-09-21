@@ -58,6 +58,7 @@ def list_jobs(
     metier: Metier | None = None,
     status: JobStatus | None = None,
     country: str | None = None,
+    max_age_days: int | None = None,
     limit: int = Query(default=50, le=200),
     offset: int = 0,
     session: Session = Depends(get_session),
@@ -79,6 +80,18 @@ def list_jobs(
         statement = statement.where(Job.status == status)
     if country:
         statement = statement.where(Job.country == country)
+
+    if max_age_days:
+        from datetime import datetime, timedelta, timezone
+        limite = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+        # Les dates en base sont naives : on compare sans fuseau
+        statement = statement.where(Job.published_at >= limite.replace(tzinfo=None))
+
+    if max_age_days:
+        from datetime import datetime, timedelta, timezone
+        limite = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+        # Les dates en base sont naives : on compare sans fuseau
+        statement = statement.where(Job.published_at >= limite.replace(tzinfo=None))
 
     # À score égal, la France passe devant la Suisse (règle de tri du cahier des charges)
     statement = statement.order_by(

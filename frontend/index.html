@@ -154,6 +154,28 @@
           <option value="rejected">Refusé</option>
         </select>
 
+        <select x-model="filters.age" @change="load()"
+          class="px-3 py-2 rounded-xl border outline-none transition"
+          :class="filters.age ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-medium' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'">
+          <option value="">Toutes les dates</option>
+          <option value="1">Aujourd'hui</option>
+          <option value="3">3 derniers jours</option>
+          <option value="7">Cette semaine</option>
+          <option value="14">2 dernières semaines</option>
+          <option value="30">Ce mois-ci</option>
+        </select>
+
+        <select x-model="filters.age" @change="load()"
+          class="px-3 py-2 rounded-xl border outline-none transition"
+          :class="filters.age ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-medium' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'">
+          <option value="">Toutes les dates</option>
+          <option value="1">Aujourd'hui</option>
+          <option value="3">3 derniers jours</option>
+          <option value="7">Cette semaine</option>
+          <option value="14">2 dernières semaines</option>
+          <option value="30">Ce mois-ci</option>
+        </select>
+
         <div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
           <span class="text-slate-400 text-xs">Score ≥</span>
           <input type="range" x-model.number="filters.min_score" @change="load()" min="0" max="90" step="5" class="w-24 accent-indigo-600">
@@ -176,6 +198,14 @@
             <button @click="refresh()" :disabled="busy"
               class="px-4 py-2 text-sm rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur font-medium disabled:opacity-50">
               Collecter les nouvelles offres
+            </button>
+            <button @click="showRecent()"
+              class="px-4 py-2 text-sm rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur font-medium">
+              Offres de la semaine
+            </button>
+            <button @click="showRecent()"
+              class="px-4 py-2 text-sm rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur font-medium">
+              Offres de la semaine
             </button>
             <button @click="selectTab('stats')"
               class="px-4 py-2 text-sm rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur font-medium">
@@ -568,7 +598,7 @@ function jobhunter() {
     busy: false, page: 0, limit: 40, search: '',
     dark: localStorage.getItem('jh_dark') === 'true',
     activeTab: 'home',
-    filters: { metier: '', status: '', min_score: 60 },
+    filters: { metier: '', status: '', min_score: 60, age: '' },
     modal: { open: false, job: null, draft: null, loading: false, saving: false, error: '', message: '' },
 
     tabs: [
@@ -613,6 +643,7 @@ function jobhunter() {
       this.activeTab = id;
       this.page = 0;
       this.filters.status = '';
+      this.filters.age = '';
       this.search = '';
       // La Suisse n'a pas de bonus de zone : son meilleur score plafonne plus bas
       this.filters.min_score = (id === 'suisse') ? 40 : 60;
@@ -659,6 +690,20 @@ function jobhunter() {
       await this.loadStats();
     },
 
+    showRecent() {
+      this.activeTab = 'toutes';
+      this.filters = { metier: '', status: '', min_score: 60, age: '7' };
+      this.page = 0;
+      this.load();
+    },
+
+    showRecent() {
+      this.activeTab = 'toutes';
+      this.filters = { metier: '', status: '', min_score: 60, age: '7' };
+      this.page = 0;
+      this.load();
+    },
+
     applyKpi(kpi) {
       // Un second clic sur le meme KPI retire le filtre
       this.filters.status = (this.filters.status === kpi.status) ? '' : kpi.status;
@@ -678,6 +723,8 @@ function jobhunter() {
       });
       if (this.filters.metier) p.set('metier', this.filters.metier);
       if (this.filters.status) p.set('status', this.filters.status);
+      if (this.filters.age) p.set('max_age_days', this.filters.age);
+      if (this.filters.age) p.set('max_age_days', this.filters.age);
 
       try {
         const res = await fetch('/jobs?' + p);
@@ -736,11 +783,11 @@ function jobhunter() {
     },
 
     filtersActive() {
-      return this.filters.metier !== '' || this.filters.status !== '' || this.search.trim() !== '';
+      return this.filters.metier !== '' || this.filters.status !== '' || this.filters.age !== '' || this.search.trim() !== '';
     },
 
     resetFilters() {
-      this.filters = { metier: '', status: '', min_score: this.activeTab === 'suisse' ? 40 : 60 };
+      this.filters = { metier: '', status: '', min_score: this.activeTab === 'suisse' ? 40 : 60, age: '' };
       this.search = '';
       this.page = 0;
       this.load();
