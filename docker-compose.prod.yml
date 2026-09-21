@@ -1,0 +1,27 @@
+# Surcouche de production : Caddy expose l'app en HTTPS,
+# le port 8000 n'est plus accessible que depuis le serveur lui-meme.
+services:
+  api:
+    ports: !override
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: jobhunter-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  caddy_data:
+  caddy_config:
