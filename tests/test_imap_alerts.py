@@ -119,3 +119,15 @@ def test_pays_suisse_pour_jobup():
     html = '<div><a href="https://www.jobup.ch/fr/emploi/detail/12345/">Informaticien support</a></div>'
     jobs = _connector().parse_email(html, "jobup")
     assert jobs[0].country == "CH"
+
+def test_jobup_separe_societe_et_ville():
+    html = """
+    <table><tr><td>
+      <a href="https://www.jobup.ch/fr/emplois/detail/0aa5f573-b3e3/">Technicien Support MAC</a>
+      <div>Meanquest SA, Ecublens VD</div>
+    </td></tr></table>
+    """
+    job = _connector().parse_email(html, "jobup")[0]
+    assert job.company == "Meanquest SA"
+    assert job.location == "Ecublens VD"
+    assert job.source_name == "imap_jobup"

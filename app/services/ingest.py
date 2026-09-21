@@ -92,4 +92,12 @@ async def run_connector(session: Session, connector: BaseConnector) -> int:
         session.commit()
         return 0
 
-    return save_jobs(session, dtos, connector.name)
+    # Un connecteur peut produire des offres de plusieurs plateformes (cas de l'IMAP) :
+    # chaque offre est enregistree sous sa vraie source, pour le badge et les statistiques
+    groupes: dict[str, list[JobDTO]] = {}
+    for dto in dtos:
+        groupes.setdefault(dto.source_name or connector.name, []).append(dto)
+
+    if not groupes:
+        return save_jobs(session, [], connector.name)
+    return sum(save_jobs(session, lot, nom) for nom, lot in groupes.items())

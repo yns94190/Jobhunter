@@ -128,6 +128,11 @@ class ImapAlertsConnector(BaseConnector):
             seen_urls.add(url)
             company, location = self._extract_context(link)
 
+            # jobup.ch et jobs.ch affichent "Societe, Ville" sur une seule ligne
+            if source in ("jobup", "jobs_ch") and company is None and location and "," in location:
+                company, _, location = location.rpartition(",")
+                company, location = company.strip(), location.strip()
+
             jobs.append(
                 JobDTO(
                     source_name=f"imap_{source}",
