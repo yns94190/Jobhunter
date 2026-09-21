@@ -71,20 +71,26 @@ def test_repli_sur_la_description():
     metier = detect_metier("Poste polyvalent H/F", "Vous assurez le support utilisateur N1.")
     assert metier == Metier.SUPPORT
 
-def test_frontalier_limite_a_45_minutes():
-    assert detect_zone("74 - Annemasse") == Zone.P2_FRONTALIER
-    assert detect_zone("01 - Gex") == Zone.P2_FRONTALIER
-    assert detect_zone("74 - Thonon-les-Bains") == Zone.P2_FRONTALIER
-    assert detect_zone("25 - Pontarlier") == Zone.P2_FRONTALIER
-    assert detect_zone("39 - Les Rousses") == Zone.P2_FRONTALIER
+
+def test_communes_de_la_liste():
+    for lieu in ("74 - Annemasse", "01 - Gex", "01 - Ferney-Voltaire", "74 - Bonneville",
+                 "74 - La Roche-sur-Foron", "74 - Monnetier-Mornex", "01 - Divonne-les-Bains"):
+        assert detect_zone(lieu) == Zone.P2_FRONTALIER, lieu
 
 
-def test_departement_frontalier_mais_trop_loin():
-    assert detect_zone("74 - Chamonix-Mont-Blanc") == Zone.P3_FRANCE
-    assert detect_zone("01 - Bourg-en-Bresse") == Zone.P3_FRANCE
-    assert detect_zone("01 - Saint-Cyr-sur-Menthon") == Zone.P3_FRANCE
+def test_communes_hors_liste():
+    for lieu in ("74 - Thonon-les-Bains", "74 - Annecy", "74 - Chamonix-Mont-Blanc", "01 - Bourg-en-Bresse"):
+        assert detect_zone(lieu) == Zone.P3_FRANCE, lieu
 
 
-def test_pas_de_faux_positif_sur_nom_ambigu():
+def test_nom_ambigu_avec_departement_confirme():
+    for lieu in ("74 - Viry", "Viry (74580)", "01 - Thoiry", "Crozet (01170)",
+                 "Beaumont, Haute-Savoie", "01 - Péron"):
+        assert detect_zone(lieu) == Zone.P2_FRONTALIER, lieu
+
+
+def test_nom_ambigu_ailleurs_en_france():
     assert detect_zone("Viry-Châtillon") != Zone.P2_FRONTALIER
+    assert detect_zone("Beaumont, Puy-de-Dôme") != Zone.P2_FRONTALIER
+    assert detect_zone("78 - Thoiry") == Zone.P1_IDF
     assert detect_zone("Megexpress") != Zone.P2_FRONTALIER

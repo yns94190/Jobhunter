@@ -10,32 +10,24 @@ from app.services.dedup import normalize
 # P1 : Île-de-France
 DEPARTEMENTS_IDF = {"75", "77", "78", "91", "92", "93", "94", "95"}
 
-# P2 : communes francaises a environ 45 min maximum de Geneve ou du canton de Vaud.
-# Liste volontairement fermee : un departement entier (74, 01...) irait jusqu'a 1h30 de la frontiere.
-# Les noms ambigus qui existent ailleurs en France (Viry, Thoiry, Chevry, Pringy...) sont exclus.
+# P2 : communes frontalieres retenues (30 km maximum de Geneve)
 VILLES_FRONTALIERES = {
-    # Genevois haut-savoyard
-    "annemasse", "ambilly", "gaillard", "ville la grand", "vetraz monthoux", "etrembieres",
-    "cranves sales", "reignier", "reignier esery", "saint julien en genevois", "st julien en genevois",
-    "archamps", "collonges sous saleve", "neydens", "presilly", "valleiry", "vulbens", "frangy",
-    "cruseilles", "allonzier la caille", "fillinges", "la roche sur foron", "saint pierre en faucigny",
-    "amancy", "bonneville", "contamine sur arve", "marignier", "cluses", "scionzier", "marnaz", "thyez",
-    # Bassin annecien
-    "annecy", "annecy le vieux", "seynod", "cran gevrier", "meythet", "epagny", "metz tessy",
-    "epagny metz tessy", "argonay", "poisy", "sillingy",
-    # Chablais, face a Lausanne
-    "thonon", "thonon les bains", "evian", "evian les bains", "publier", "amphion", "douvaine", "sciez",
-    "anthy sur leman", "margencel", "allinges", "perrignier", "bons en chablais", "machilly",
-    "veigy foncenex", "chens sur leman", "loisin",
-    # Pays de Gex et Valserine (Ain)
-    "gex", "ferney voltaire", "divonne", "divonne les bains", "saint genis pouilly", "st genis pouilly",
-    "prevessin", "prevessin moens", "ornex", "versonnex", "segny", "echenevex", "sauverny", "vesancy",
-    "grilly", "saint jean de gonville", "pougny", "bellegarde sur valserine", "valserhone",
-    "chatillon en michaille",
-    # Frontiere vaudoise cote Jura et Doubs
-    "les rousses", "bois d amont", "premanon", "lamoura", "morez", "hauts de bienne",
-    "pontarlier", "jougne", "les hopitaux neufs", "metabief", "labergement sainte marie", "houtaud",
+    "gaillard", "ambilly", "annemasse", "ferney voltaire", "etrembieres", "ornex",
+    "prevessin", "prevessin moens", "saint genis pouilly", "st genis pouilly",
+    "saint julien en genevois", "st julien en genevois", "vetraz monthoux", "ville la grand",
+    "archamps", "monnetier mornex", "collonges sous saleve", "cranves sales", "neydens", "segny",
+    "versonnex", "sauverny", "fillinges", "gex", "echenevex", "grilly", "reignier", "reignier esery",
+    "valleiry", "veigy foncenex", "divonne", "divonne les bains", "chens sur leman", "douvaine",
+    "la roche sur foron", "pougny", "bonneville",
 }
+
+# Communes dont le nom existe aussi ailleurs (Viry-Chatillon, Thoiry dans les Yvelines,
+# Chevry-Cossigny...) : retenues uniquement si le departement attendu est confirme.
+VILLES_FRONTALIERES_AMBIGUES = {
+    "beaumont": "74", "bonne": "74", "viry": "74",
+    "thoiry": "01", "cessy": "01", "chevry": "01", "crozet": "01", "farges": "01", "peron": "01",
+}
+NOMS_DEPARTEMENTS = {"74": "haute savoie", "01": "ain"}
 
 # P4 : Suisse romande
 VILLES_SUISSES = {
@@ -55,6 +47,22 @@ def _extract_departement(location: str) -> str | None:
     """Extrait le numero de departement d'un libelle France Travail ("94 - Champigny")."""
     match = re.match(r"^\s*(\d{2,3})\s*[-–]", location)
     return match.group(1) if match else None
+
+
+def _est_frontalier(location: str | None, normalized: str) -> bool:
+    """Commune frontaliere retenue ; les noms ambigus exigent le bon departement."""
+    if _contient_ville(normalized, VILLES_FRONTALIERES):
+        return True
+    brut = location or ""
+    departement = _extract_departement(brut)
+    for ville, attendu in VILLES_FRONTALIERES_AMBIGUES.items():
+        if not re.search(rf"\b{re.escape(ville)}\b", normalized):
+            continue
+        if (departement == attendu
+                or re.search(rf"\b{attendu}\d{{3}}\b", brut)
+                or re.search(rf"\b{NOMS_DEPARTEMENTS[attendu]}\b", normalized)):
+            return True
+    return False
 
 
 def detect_country(location: str | None, hint: str | None = None) -> str:
@@ -78,7 +86,7 @@ def detect_zone(location: str | None, country: str = "FR", description: str | No
     if normalized:
         if _extract_departement(location or "") in DEPARTEMENTS_IDF:
             return Zone.P1_IDF
-        if _contient_ville(normalized, VILLES_FRONTALIERES):
+        if _est_frontalier(location, normalized):
             return Zone.P2_FRONTALIER
         if _contient_ville(normalized, VILLES_SUISSES):
             return Zone.P4_SUISSE
