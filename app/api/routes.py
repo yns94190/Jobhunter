@@ -15,7 +15,7 @@ from app.models import CLOSED_STATUSES, Application, Attachment, Job, JobStatus,
 from app.services.analytics import analytics, historique_offre
 from app.services.attachments import AttachmentError, delete_attachment, save_upload
 from app.services.backfill import backfill_zones_et_metiers
-from app.services.contact import extract_contact_email, is_valid_email
+from app.services.contact import detect_all_contacts, is_valid_email, resolve_contact
 from app.services.dedup import normalize
 from app.services.generator import GeneratorError, generate_application, generate_batch
 from app.services.ingest import run_connector
@@ -190,6 +190,16 @@ def run_backfill(session: Session = Depends(get_session)) -> dict:
     return backfill_zones_et_metiers(session)
 
 
+@router.post("/admin/detect-contacts")
+def run_detect_contacts(dry_run: bool = False, session: Session = Depends(get_session)) -> dict:
+    """Cherche une adresse publiée dans le texte de chaque annonce qui n'en a pas.
+
+    Même règle que POST /jobs/{id}/detect-contact : rien n'est deviné, une adresse
+    valide n'est jamais remplacée. dry_run=true pour voir le résultat sans écrire.
+    """
+    return detect_all_contacts(session, dry_run=dry_run)
+
+
 @router.get("/stats")
 def stats(session: Session = Depends(get_session)) -> dict:
     """Répartition des offres par zone, métier, source et statut."""
@@ -338,7 +348,7 @@ def detect_contact(job_id: int, session: Session = Depends(get_session)) -> dict
     if is_valid_email(job.contact_email):
         return {"found": True, "contact_email": job.contact_email, "source": "existing"}
 
-    email = extract_contact_email(job.description)
+    email = resolve_contact(job)
     if not email:
         # On ne touche pas à contact_email : il peut contenir la consigne de la source
         return {"found": False, "contact_email": None, "source": None}

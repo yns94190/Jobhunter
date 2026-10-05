@@ -94,7 +94,7 @@ Les offres postulées, relancées, en entretien, refusées ou ignorées sont mas
 
 ### Adresse de contact
 
-L'adresse n'est jamais devinée : elle vient de la source ou du **texte de l'annonce** (`app/services/contact.py`), à l'ingestion ou via le bouton « Chercher une adresse dans l'annonce » (`POST /jobs/{id}/detect-contact`). Les adresses techniques (noreply, postmaster...) et celles des plateformes (Indeed, LinkedIn, Adzuna, jobup, jobs.ch, France Travail) sont écartées ; une boîte de recrutement (rh@, recrutement@, jobs@...) est préférée. Aucun motif du type prenom.nom@, aucun service d'enrichissement, aucun scraping : une adresse inventée produit des rebonds qui pénalisent le compte d'envoi. Sans adresse publiée, l'interface renvoie vers le formulaire officiel de l'annonce.
+L'adresse n'est jamais devinée : elle vient de la source ou du **texte de l'annonce** (`app/services/contact.py`), à l'ingestion, via le bouton « Chercher une adresse dans l'annonce » (`POST /jobs/{id}/detect-contact`), ou sur toute la base avec `POST /admin/detect-contacts` (`?dry_run=true` pour simuler sans écrire ; relançable sans effet de bord). Les adresses techniques (noreply, postmaster...) et celles des plateformes (Indeed, LinkedIn, Adzuna, jobup, jobs.ch, France Travail) sont écartées ; une boîte de recrutement (rh@, recrutement@, jobs@...) est préférée. Aucun motif du type prenom.nom@, aucun service d'enrichissement, aucun scraping : une adresse inventée produit des rebonds qui pénalisent le compte d'envoi. Sans adresse publiée, l'interface renvoie vers le formulaire officiel de l'annonce.
 
 ### Affichage
 
