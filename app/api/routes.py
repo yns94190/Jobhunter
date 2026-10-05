@@ -1,8 +1,9 @@
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlmodel import Session, select
 
 from app.config import settings
@@ -14,11 +15,13 @@ from app.models import CLOSED_STATUSES, Application, Attachment, Job, JobStatus,
 from app.services.analytics import analytics, historique_offre
 from app.services.attachments import AttachmentError, delete_attachment, save_upload
 from app.services.backfill import backfill_zones_et_metiers
+from app.services.contact import extract_contact_email, is_valid_email
 from app.services.dedup import normalize
 from app.services.generator import GeneratorError, generate_application, generate_batch
 from app.services.ingest import run_connector
 from app.services.scoring import score_all
 from app.services.tracker import (
+    RELANCE_APRES_JOURS,
     TrackerError,
     jobs_a_relancer,
     send_application,
@@ -55,6 +58,7 @@ def list_jobs(
     country: str | None = None,
     q: str | None = None,
     max_age_days: int | None = None,
+    date_field: Literal["published", "applied"] = "published",
     include_closed: bool = False,
     limit: int = Query(default=50, le=200),
     offset: int = 0,
@@ -64,6 +68,9 @@ def list_jobs(
 
     Sans filtre de statut, les offres déjà traitées (postulées, relancées, entretien,
     refusées, ignorées) sont masquées, sauf si include_closed=true.
+
+    date_field=applied : max_age_days porte sur la date de candidature, le tri se fait
+    par candidature la plus récente, et les offres jamais postulées sont exclues.
     """
     statement = select(Job).where(Job.score >= min_score)
 
@@ -85,31 +92,44 @@ def list_jobs(
     if country:
         statement = statement.where(Job.country == country)
 
+    by_applied = date_field == "applied"
+    date_column = Job.applied_at if by_applied else Job.published_at
+    if by_applied:
+        statement = statement.where(Job.applied_at.is_not(None))
+
     if max_age_days:
         limite = datetime.now(timezone.utc) - timedelta(days=max_age_days)
         # Les dates en base sont naives : on compare sans fuseau
-        statement = statement.where(Job.published_at >= limite.replace(tzinfo=None))
+        statement = statement.where(date_column >= limite.replace(tzinfo=None))
 
-    # À score égal, la France passe devant la Suisse (règle de tri du cahier des charges)
-    statement = statement.order_by(
-        Job.score.desc(),
-        Job.country.asc(),  # "CH" < "FR" en ASCII, donc on inverse plus bas
-        Job.published_at.desc(),
-    )
+    if by_applied:
+        statement = statement.order_by(Job.applied_at.desc(), Job.id.desc())
+    else:
+        # À score égal, la France passe devant la Suisse (règle de tri du cahier des charges)
+        statement = statement.order_by(
+            Job.score.desc(),
+            Job.country.asc(),  # "CH" < "FR" en ASCII, donc on inverse plus bas
+            Job.published_at.desc(),
+        )
     if q and q.strip():
         # Recherche insensible aux accents, sur l'intitule, la societe et la ville.
         # Tous les mots doivent etre presents : "technicien geneve".
         mots = normalize(q).split()
         candidats = session.exec(statement).all()
-        jobs = [
+        matching = [
             j for j in candidats
             if all(m in normalize(f"{j.title} {j.company or ''} {j.location or ''}") for m in mots)
-        ][offset:offset + limit]
+        ]
+        total = len(matching)
+        jobs = matching[offset:offset + limit]
     else:
+        # Nombre total de résultats, indépendamment de la pagination
+        total = session.exec(select(func.count()).select_from(statement.order_by(None).subquery())).one()
         jobs = session.exec(statement.offset(offset).limit(limit)).all()
 
-    # Tri final en Python : France d'abord à score égal
-    jobs = sorted(jobs, key=lambda j: (-j.score, 0 if j.country == "FR" else 1))
+    if not by_applied:
+        # Tri final en Python : France d'abord à score égal
+        jobs = sorted(jobs, key=lambda j: (-j.score, 0 if j.country == "FR" else 1))
 
     # On expose le nom de la source pour l'affichage des badges
     sources = {s.id: s.name for s in session.exec(select(Source)).all()}
@@ -120,7 +140,7 @@ def list_jobs(
         data["has_draft"] = job.status != JobStatus.NEW
         items.append(data)
 
-    return {"count": len(items), "items": items}
+    return {"count": len(items), "total": total, "items": items}
 
 
 @router.get("/jobs/{job_id}")
@@ -183,9 +203,20 @@ def stats(session: Session = Depends(get_session)) -> dict:
             result[value] = result.get(value, 0) + 1
         return dict(sorted(result.items(), key=lambda kv: -kv[1]))
 
+    zone_of = lambda j: j.zone.value if hasattr(j.zone, "value") else j.zone  # noqa: E731
+    open_jobs = [j for j in jobs if j.status not in CLOSED_STATUSES]
+    open_par_zone: dict = {}
+    for job in open_jobs:
+        open_par_zone[zone_of(job)] = open_par_zone.get(zone_of(job), 0) + 1
+
     return {
         "total": len(jobs),
-        "par_zone": count_by(lambda j: j.zone.value if hasattr(j.zone, "value") else j.zone),
+        # Offres encore à traiter : ce que montrent les onglets France / Suisse / Toutes
+        "open_total": len(open_jobs),
+        "open_par_zone": open_par_zone,
+        # Seuil de relance unique, lu par le frontend plutôt que recopié
+        "relance_apres_jours": RELANCE_APRES_JOURS,
+        "par_zone": count_by(zone_of),
         "par_metier": count_by(lambda j: j.metier.value if hasattr(j.metier, "value") else j.metier),
         "par_source": count_by(lambda j: sources.get(j.source_id, "?")),
         "par_statut": count_by(lambda j: j.status.value if hasattr(j.status, "value") else j.status),
@@ -294,10 +325,46 @@ def send_job_application(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/jobs/{job_id}/detect-contact")
+def detect_contact(job_id: int, session: Session = Depends(get_session)) -> dict:
+    """Cherche une adresse publiée dans le texte de l'annonce, et seulement là.
+
+    Aucune adresse n'est devinée : si l'annonce n'en contient pas, on le dit.
+    """
+    job = session.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Offre introuvable")
+
+    if is_valid_email(job.contact_email):
+        return {"found": True, "contact_email": job.contact_email, "source": "existing"}
+
+    email = extract_contact_email(job.description)
+    if not email:
+        # On ne touche pas à contact_email : il peut contenir la consigne de la source
+        return {"found": False, "contact_email": None, "source": None}
+
+    job.contact_email = email
+    job.updated_at = datetime.now(timezone.utc)
+    session.add(job)
+    session.commit()
+    return {"found": True, "contact_email": email, "source": "description"}
+
+
 @router.get("/relances")
 def list_relances(session: Session = Depends(get_session)) -> list[dict]:
-    """Offres postulees depuis plus de 10 jours sans reponse."""
-    return jobs_a_relancer(session)
+    """Offres postulees depuis plus de RELANCE_APRES_JOURS jours sans reponse.
+
+    La selection reste celle de jobs_a_relancer ; on y ajoute seulement
+    les champs necessaires a l'affichage des cartes.
+    """
+    sources = {s.id: s.name for s in session.exec(select(Source)).all()}
+    resultats = []
+    for relance in jobs_a_relancer(session):
+        job = session.get(Job, relance["job_id"])
+        data = job.model_dump()
+        data["source_name"] = sources.get(job.source_id, "inconnue")
+        resultats.append({**data, **relance})
+    return resultats
 
 
 @router.get("/analytics")

@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 RELANCE_APRES_JOURS = 10
 
+# Statuts qui supposent qu'une candidature a été envoyée
+APPLIED_STATUSES = (JobStatus.APPLIED, JobStatus.FOLLOWED_UP, JobStatus.INTERVIEW, JobStatus.REJECTED)
+
 # Controle volontairement simple : une seule adresse, sans espace ni retour a la ligne
 EMAIL_RE = re.compile(r"[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+")
 
@@ -36,7 +39,10 @@ def update_status(session: Session, job: Job, status: JobStatus, note: str | Non
     job.status = status
     job.updated_at = datetime.now(timezone.utc)
 
-    if status == JobStatus.APPLIED and not job.applied_at:
+    # Un relancé / entretien / refus implique une candidature : sans date connue,
+    # on retient celle du premier statut qui le prouve (sinon l'offre sortirait
+    # des vues filtrées par date de candidature)
+    if status in APPLIED_STATUSES and not job.applied_at:
         job.applied_at = datetime.now(timezone.utc)
 
     session.add(job)
