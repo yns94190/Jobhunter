@@ -9,6 +9,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+import sqlmodel  # noqa: F401 — types SQLModel (AutoString) utilises par l autogenerate
 ${imports if imports else ""}
 
 # revision identifiers, used by Alembic.

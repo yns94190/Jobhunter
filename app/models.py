@@ -36,6 +36,16 @@ class JobStatus(str, Enum):
     IGNORED = "ignored"
 
 
+# Offres déjà traitées : masquées par défaut des listes, visibles dans "Candidatures"
+CLOSED_STATUSES = (
+    JobStatus.APPLIED,
+    JobStatus.FOLLOWED_UP,
+    JobStatus.INTERVIEW,
+    JobStatus.REJECTED,
+    JobStatus.IGNORED,
+)
+
+
 class SourceKind(str, Enum):
     API = "api"
     SCRAPE = "scrape"
@@ -122,6 +132,18 @@ class Profile(SQLModel, table=True):
     licences: list = Field(default_factory=list, sa_column=Column(JSON))
     sample_letters: list = Field(default_factory=list, sa_column=Column(JSON))
     updated_at: datetime = Field(default_factory=utcnow)
+
+
+class Attachment(SQLModel, table=True):
+    """Un document téléversé (CV, lettre...) joignable aux candidatures."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    filename: str                               # nom assaini, affiché à l'utilisateur
+    content_type: str
+    size: int                                   # en octets
+    path: str                                   # nom du fichier dans le dossier des pièces jointes
+    is_default: bool = Field(default=False, index=True)  # coché d'office à l'envoi
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 from app.models_history import StatusHistory  # noqa: F401,E402

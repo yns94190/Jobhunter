@@ -50,8 +50,41 @@ Les clés se renseignent dans `.env`, jamais versionné :
 | `IMAP_HOST` / `_USER` / `_PASSWORD` | Lecture des alertes mail | mot de passe d'application Gmail |
 | `GROQ_API_KEY` | Génération des lettres (gratuit) | console.groq.com |
 | `AUTH_PASSWORD` | Protège l'accès en ligne | au choix |
+| `SMTP_HOST` / `_PORT` / `_USER` / `_PASSWORD` | Envoi des candidatures par mail | mot de passe d'application Gmail |
+| `SMTP_FROM` | Adresse affichée en `From` et `Reply-To` | ton adresse de candidature |
+| `ATTACHMENTS_DIR` | Dossier des pièces jointes (défaut `data/attachments`) | — |
 
 Les pondérations du scoring se règlent dans `scoring.yaml`, sans toucher au code.
+
+### Envoi des candidatures par mail
+
+Le mail part du compte `SMTP_USER` (enveloppe SMTP) avec l'en-tête `From` et `Reply-To` = `SMTP_FROM` (à défaut, `SMTP_USER`). Exemple Gmail :
+
+~~~env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587          # STARTTLS ; 465 = TLS direct, aussi géré
+SMTP_USER=compte.denvoi@gmail.com
+SMTP_PASSWORD=xxxx xxxx xxxx xxxx   # mot de passe d'application, pas le mot de passe du compte
+SMTP_FROM=adresse.de.candidature@gmail.com
+~~~
+
+Si `SMTP_FROM` diffère de `SMTP_USER`, Gmail réécrit le `From` sauf si l'adresse est déclarée comme alias vérifié (Paramètres › Comptes › « Envoyer des e-mails en tant que »). Le plus simple : `SMTP_USER` = `SMTP_FROM`.
+
+Si une variable manque, l'API répond 400 en nommant les variables absentes, sans rien envoyer.
+
+**Aucun envoi automatique.** L'envoi ne part que depuis la modale « Candidature » : destinataire (pré-rempli avec l'adresse de l'offre, modifiable), choix des pièces jointes, clic sur « Envoyer par mail » puis confirmation. Les corrections non enregistrées du brouillon sont sauvegardées juste avant l'envoi. Ensuite l'offre passe en « postulé », `sent_at` est renseigné et le changement est tracé dans l'historique. Aucune route ni tâche planifiée n'envoie de candidature, et un test le vérifie.
+
+### Pièces jointes
+
+Section « Mes documents » de la barre latérale : téléverser CV et lettres, ★ pour les joindre par défaut (cochés d'office dans la modale).
+
+- 5 Mo maximum par fichier, extensions `pdf`, `docx`, `odt`, `png`, `jpg` uniquement ; le contenu doit correspondre à l'extension (signature des premiers octets)
+- nom de fichier assaini (accents, espaces et chemins retirés), stocké sous un nom unique dans `data/attachments/`, hors git et monté en volume
+- API : `POST /attachments` (multipart, champ `file`), `GET /attachments`, `PATCH /attachments/{id}` (`{"is_default": true|false}`, sans corps = bascule), `DELETE /attachments/{id}`
+
+### Offres déjà traitées
+
+Les offres postulées, relancées, en entretien, refusées ou ignorées sont masquées des onglets France / Frontalier / Suisse / Toutes. Elles restent visibles dans « Candidatures » et via le filtre de statut. Côté API : `GET /jobs?include_closed=true` les réaffiche ; `?status=...` filtre comme avant.
 
 ## Tests
 

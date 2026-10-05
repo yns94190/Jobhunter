@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str | None = None
     smtp_password: str | None = None
+    # Adresse affichée en From et Reply-To ; à défaut, SMTP_USER
+    smtp_from: str | None = None
+
+    # Pièces jointes téléversées (dossier monté en volume, hors git)
+    attachments_dir: str = "data/attachments"
 
 
 settings = Settings()
