@@ -154,13 +154,30 @@
           placeholder="Rechercher un poste, une société, une ville..."
           class="flex-1 min-w-[180px] max-w-md px-3.5 py-2 text-sm rounded-xl bg-slate-100 dark:bg-slate-800 border border-transparent focus:border-indigo-400 focus:bg-white dark:focus:bg-slate-900 outline-none transition">
 
-        <div class="ml-auto flex gap-2">
+        <div class="ml-auto flex gap-2 flex-wrap justify-end">
+          <!-- Pagination dans l'en-tête collant : accessible sans descendre en bas de la liste -->
+          <div x-show="isListView() && pageCount() > 1" x-cloak
+            class="flex items-center gap-1 px-1 rounded-xl border border-slate-200 dark:border-slate-700 text-sm">
+            <button @click="goToPage(page - 1)" :disabled="page === 0 || busy" title="Page précédente"
+              class="w-8 h-8 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40">←</button>
+            <label class="flex items-center gap-1 text-slate-500 dark:text-slate-400">
+              <span class="sr-only">Aller à la page</span>
+              <input type="number" min="1" :max="pageCount()" :value="page + 1"
+                @change="goToPage($event.target.value - 1, $event.target)" @keydown.enter="$event.target.blur()"
+                title="Taper un numéro de page puis Entrée"
+                class="w-12 px-1 py-1 text-center rounded-md bg-slate-100 dark:bg-slate-800 outline-none focus:ring-2 focus:ring-indigo-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none">
+              <span x-text="'/ ' + pageCount()"></span>
+            </label>
+            <button @click="goToPage(page + 1)" :disabled="page + 1 >= pageCount() || busy" title="Page suivante"
+              class="w-8 h-8 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40">→</button>
+          </div>
           <button @click="dark = !dark; localStorage.setItem('jh_dark', dark)"
             class="md:hidden px-3 py-2 text-sm rounded-xl bg-slate-100 dark:bg-slate-800"
             x-text="dark ? '☀️' : '🌙'"></button>
-          <button @click="rescore()" :disabled="busy"
-            class="px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">
-            Recalculer
+          <button @click="rescore()" :disabled="busy" title="Recalculer les scores"
+            class="px-3 sm:px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">
+            <!-- Icône seule sur téléphone : la ligne de boutons tient avec la pagination -->
+            <span class="sm:hidden">↻</span><span class="hidden sm:inline">Recalculer</span>
           </button>
           <button @click="refresh()" :disabled="busy"
             class="px-3.5 py-2 text-sm rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium disabled:opacity-50 shadow-sm shadow-indigo-600/20">
@@ -579,10 +596,17 @@
       </div>
 
       <div class="flex gap-2 items-center justify-center pt-2" x-show="!busy && jobs.length > 0 && isListView()">
-        <button @click="page > 0 && (page--, load())" :disabled="page === 0"
+        <button @click="goToPage(page - 1)" :disabled="page === 0" title="Page précédente"
           class="px-4 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40">←</button>
-        <span class="text-sm text-slate-400" x-text="'Page ' + (page + 1) + ' / ' + Math.max(1, Math.ceil(total / limit))"></span>
-        <button @click="page++; load()" :disabled="(page + 1) * limit >= total"
+        <label class="flex items-center gap-1.5 text-sm text-slate-400">
+          Page
+          <input type="number" min="1" :max="pageCount()" :value="page + 1"
+            @change="goToPage($event.target.value - 1, $event.target)" @keydown.enter="$event.target.blur()"
+            title="Taper un numéro de page puis Entrée"
+            class="w-14 px-1.5 py-1.5 text-center rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none">
+          <span x-text="'/ ' + pageCount()"></span>
+        </label>
+        <button @click="goToPage(page + 1)" :disabled="page + 1 >= pageCount()" title="Page suivante"
           class="px-4 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40">→</button>
       </div>
 
@@ -1146,6 +1170,21 @@ function jobhunter() {
     hiddenInCurrentView(status) {
       if (this.filters.status) return status !== this.filters.status;
       return this.closedStatuses.includes(status);
+    },
+
+    pageCount() { return Math.max(1, Math.ceil(this.total / this.limit)); },
+
+    // Aller à une page (index à partir de 0), depuis les flèches ou le champ numérique
+    goToPage(index, input = null) {
+      // Champ vidé : on remet la page courante plutôt que de sauter à la première
+      if (input && input.value.trim() === '') { input.value = this.page + 1; return; }
+      const target = Math.min(Math.max(0, Math.floor(Number(index)) || 0), this.pageCount() - 1);
+      // Saisie vide ou hors limites : le champ affiche la page réellement retenue
+      if (input) input.value = target + 1;
+      if (target === this.page) return;
+      this.page = target;
+      window.scrollTo({ top: 0 });
+      this.load();
     },
 
     removeFromList(jobId) {
