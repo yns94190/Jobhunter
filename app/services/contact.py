@@ -8,7 +8,15 @@ inventée produit des rebonds qui font sanctionner le compte d'envoi.
 
 from __future__ import annotations
 
+import logging
 import re
+from datetime import datetime, timezone
+
+from sqlmodel import Session, select
+
+from app.models import Job
+
+logger = logging.getLogger(__name__)
 
 # Volontairement strict : partie locale classique, domaine à labels, extension alphabétique
 EMAIL_PATTERN = re.compile(
@@ -88,3 +96,54 @@ def extract_contact_email(text: str | None) -> str | None:
     if not emails:
         return None
     return next((e for e in emails if _is_recruitment_address(e)), emails[0])
+
+
+def resolve_contact(job: Job) -> str | None:
+    """Adresse à enregistrer pour l'offre, ou None s'il n'y a rien à changer.
+
+    Une adresse déjà valide n'est jamais remplacée. Sans adresse dans l'annonce,
+    contact_email reste tel quel : il peut contenir la consigne de la source.
+    """
+    if is_valid_email(job.contact_email):
+        return None
+    return extract_contact_email(job.description)
+
+
+def detect_all_contacts(session: Session, dry_run: bool = False) -> dict:
+    """Cherche une adresse publiée dans chaque annonce qui n'en a pas encore.
+
+    dry_run=True : calcule le résultat sans rien écrire en base.
+    """
+    jobs = session.exec(select(Job)).all()
+    examined = 0
+    updated = []
+    now = datetime.now(timezone.utc)
+
+    for job in jobs:
+        if is_valid_email(job.contact_email):
+            continue
+        examined += 1
+        email = resolve_contact(job)
+        if not email:
+            continue
+        updated.append({"job_id": job.id, "title": job.title, "contact_email": email})
+        if not dry_run:
+            job.contact_email = email
+            job.updated_at = now
+            session.add(job)
+
+    if not dry_run and updated:
+        session.commit()
+
+    logger.info(
+        "Recherche d'adresses : %d offres sans adresse, %d trouvees%s",
+        examined, len(updated), " (simulation)" if dry_run else "",
+    )
+    return {
+        "dry_run": dry_run,
+        "already_valid": len(jobs) - examined,
+        "examined": examined,
+        "found": len(updated),
+        "not_found": examined - len(updated),
+        "updated": updated,
+    }

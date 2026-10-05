@@ -158,3 +158,62 @@ def test_ingestion_extracts_email_from_description(session):
         "Poste 3": "rh@source.fr",          # adresse fournie par la source prioritaire
         "Poste 4": "rh@dans-le-texte.fr",
     }
+
+
+# --- Route admin POST /admin/detect-contacts ---
+
+
+def _seed_contacts(session: Session) -> dict[str, Job]:
+    jobs = {
+        "phrase_avec_adresse": _job(session, dedup_hash="a1", description="CV a recrutement@exemple-sa.fr", contact_email=FT_PHRASE),
+        "vide_avec_adresse": _job(session, dedup_hash="a2", description="Ecrire a jobs@boulangerie-exemple.fr", contact_email=None),
+        "phrase_sans_adresse": _job(session, dedup_hash="a3", description="Postulez en ligne.", contact_email=FT_PHRASE),
+        "vide_sans_adresse": _job(session, dedup_hash="a4", description="Suivez-nous : @Entreprise", contact_email=None),
+        "deja_valide": _job(session, dedup_hash="a5", description="autre@exemple.fr", contact_email="rh@exemple.fr"),
+        "plateforme_seule": _job(session, dedup_hash="a6", description="Via alertes@indeed.com", contact_email=None),
+    }
+    return jobs
+
+
+def test_admin_detect_contacts_fills_only_found_addresses(client, session):
+    jobs = _seed_contacts(session)
+    body = client.post("/admin/detect-contacts").json()
+
+    assert body["dry_run"] is False
+    assert (body["already_valid"], body["examined"], body["found"], body["not_found"]) == (1, 5, 2, 3)
+    assert sorted(u["job_id"] for u in body["updated"]) == sorted(
+        [jobs["phrase_avec_adresse"].id, jobs["vide_avec_adresse"].id]
+    )
+
+    for job in jobs.values():
+        session.refresh(job)
+    assert jobs["phrase_avec_adresse"].contact_email == "recrutement@exemple-sa.fr"
+    assert jobs["vide_avec_adresse"].contact_email == "jobs@boulangerie-exemple.fr"
+    # Rien d'inventé, rien d'effacé, rien de remplacé
+    assert jobs["phrase_sans_adresse"].contact_email == FT_PHRASE
+    assert jobs["vide_sans_adresse"].contact_email is None
+    assert jobs["plateforme_seule"].contact_email is None
+    assert jobs["deja_valide"].contact_email == "rh@exemple.fr"
+
+
+def test_admin_detect_contacts_dry_run_writes_nothing(client, session):
+    jobs = _seed_contacts(session)
+    body = client.post("/admin/detect-contacts?dry_run=true").json()
+    assert (body["dry_run"], body["found"]) == (True, 2)
+
+    for job in jobs.values():
+        session.refresh(job)
+    assert jobs["phrase_avec_adresse"].contact_email == FT_PHRASE
+    assert jobs["vide_avec_adresse"].contact_email is None
+
+
+def test_admin_detect_contacts_is_idempotent(client, session):
+    _seed_contacts(session)
+    client.post("/admin/detect-contacts")
+    second = client.post("/admin/detect-contacts").json()
+    assert (second["already_valid"], second["examined"], second["found"]) == (3, 3, 0)
+
+
+def test_admin_detect_contacts_empty_base(client):
+    body = client.post("/admin/detect-contacts").json()
+    assert (body["examined"], body["found"], body["updated"]) == (0, 0, [])
