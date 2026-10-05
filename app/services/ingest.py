@@ -7,6 +7,7 @@ from sqlmodel import Session, select
 
 from app.connectors.base import BaseConnector, JobDTO
 from app.models import Job, Source
+from app.services.contact import extract_contact_email, is_valid_email
 from app.services.dedup import compute_hash, is_duplicate, normalize
 from app.services.normalize import detect_country, detect_metier, detect_zone
 logger = logging.getLogger(__name__)
@@ -20,6 +21,17 @@ def _get_or_create_source(session: Session, name: str) -> Source:
         session.commit()
         session.refresh(source)
     return source
+
+
+def _contact_email(dto: JobDTO) -> str | None:
+    """Adresse fournie par la source si c'en est une, sinon celle publiée dans l'annonce.
+
+    France Travail met parfois une phrase dans "courriel" ("Pour postuler, utiliser
+    le lien suivant : ...") : ce n'est pas une adresse, on cherche dans la description.
+    """
+    if is_valid_email(dto.contact_email):
+        return dto.contact_email.strip()
+    return extract_contact_email(dto.description)
 
 
 def save_jobs(session: Session, dtos: list[JobDTO], source_name: str) -> int:
@@ -59,7 +71,7 @@ def save_jobs(session: Session, dtos: list[JobDTO], source_name: str) -> int:
                 contract_type=dto.contract_type,
                 description=dto.description,
                 url=dto.url,
-                contact_email=dto.contact_email,
+                contact_email=_contact_email(dto),
                 published_at=dto.published_at,
                 dedup_hash=dedup_hash,
             )

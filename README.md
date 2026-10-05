@@ -86,6 +86,20 @@ Section « Mes documents » de la barre latérale : téléverser CV et lettres, 
 
 Les offres postulées, relancées, en entretien, refusées ou ignorées sont masquées des onglets France / Frontalier / Suisse / Toutes. Elles restent visibles dans « Candidatures » et via le filtre de statut. Côté API : `GET /jobs?include_closed=true` les réaffiche ; `?status=...` filtre comme avant.
 
+### Suivi des candidatures
+
+- **Candidatures** : triées par date d'envoi, filtrables par date de candidature (« Postulé aujourd'hui », « cette semaine »...) et par zone. Côté API : `GET /jobs?status=applied&date_field=applied&max_age_days=1` ; avec `date_field=applied`, les offres sans date de candidature sont exclues. La réponse contient `total`, le nombre de résultats hors pagination.
+- **À relancer** : candidatures sans réponse depuis `RELANCE_APRES_JOURS` jours (10, dans `app/services/tracker.py`, seule source de ce seuil, exposé par `/stats`). Chaque carte rouvre la candidature ; « Marquer relancé » la retire de la liste.
+- Passer une offre en relancé / entretien / refusé sans être passé par « postulé » renseigne la date de candidature à ce moment-là.
+
+### Adresse de contact
+
+L'adresse n'est jamais devinée : elle vient de la source ou du **texte de l'annonce** (`app/services/contact.py`), à l'ingestion ou via le bouton « Chercher une adresse dans l'annonce » (`POST /jobs/{id}/detect-contact`). Les adresses techniques (noreply, postmaster...) et celles des plateformes (Indeed, LinkedIn, Adzuna, jobup, jobs.ch, France Travail) sont écartées ; une boîte de recrutement (rh@, recrutement@, jobs@...) est préférée. Aucun motif du type prenom.nom@, aucun service d'enrichissement, aucun scraping : une adresse inventée produit des rebonds qui pénalisent le compte d'envoi. Sans adresse publiée, l'interface renvoie vers le formulaire officiel de l'annonce.
+
+### Affichage
+
+Barre latérale complète à partir de 1280 px, réduite aux icônes entre 768 et 1279 px (dépliable), tiroir sous 768 px. Les confirmations et messages passent par des fenêtres intégrées, jamais par `alert()` / `confirm()`.
+
 ## Tests
 
 ~~~bash
