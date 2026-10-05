@@ -282,6 +282,23 @@
           :class="filtersActive() ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300 font-medium' : 'text-slate-500 hover:bg-white dark:hover:bg-slate-900'">
           <span x-show="filtersActive()">⚠ </span>Réinitialiser
         </button>
+
+        <!-- Pagination dans la barre de filtres, alignée à droite -->
+        <div x-show="pageCount() > 1"
+          class="ml-auto flex items-center gap-1 px-1 py-1 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <button @click="goToPage(page - 1)" :disabled="page === 0 || busy" title="Page précédente"
+            class="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40">←</button>
+          <label class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+            Page
+            <input type="number" min="1" :max="pageCount()" :value="page + 1"
+              @change="goToPage($event.target.value - 1, $event.target)" @keydown.enter="$event.target.blur()"
+              title="Taper un numéro de page puis Entrée"
+              class="w-12 px-1 py-1 text-center rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none">
+            <span x-text="'/ ' + pageCount()"></span>
+          </label>
+          <button @click="goToPage(page + 1)" :disabled="page + 1 >= pageCount() || busy" title="Page suivante"
+            class="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40">→</button>
+        </div>
       </div>
 
       <div x-show="activeTab === 'home'" x-cloak class="space-y-5">
