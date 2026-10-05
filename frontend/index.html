@@ -15,6 +15,21 @@
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
   .dark ::-webkit-scrollbar-thumb { background: #475569; }
+
+  /* Barre latérale : complète à partir de 1280 px, icônes seules entre 768 et 1279 px,
+     tiroir superposé à la demande (seule forme sous 768 px) */
+  .sb { width: 15rem; }
+  .sb-mini { display: none; }
+  @media (max-width: 1279.98px) {
+    .sb:not(.sb-open) { width: 4.5rem; }
+    .sb:not(.sb-open) .sb-label { display: none; }
+    .sb:not(.sb-open) .sb-item { justify-content: center; padding-left: 0; padding-right: 0; }
+    .sb:not(.sb-open) .sb-mini { display: flex; }
+  }
+  .sb.sb-open {
+    display: flex; position: fixed; top: 0; bottom: 0; left: 0; z-index: 45;
+    box-shadow: 0 20px 50px rgb(15 23 42 / 0.35);
+  }
 </style>
 </head>
 <body x-data="jobhunter()" x-init="init()" :class="dark && 'dark'">
@@ -22,80 +37,104 @@
 
 <div class="flex">
 
-  <aside class="hidden lg:flex flex-col w-60 shrink-0 h-screen sticky top-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800">
-    <button @click="selectTab('home')" class="px-5 py-5 flex items-center gap-2.5 hover:opacity-80 transition text-left w-full">
-      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 grid place-items-center text-white font-bold">J</div>
-      <div>
-        <div class="font-semibold leading-tight">JobHunter</div>
-        <div class="text-[11px] text-slate-400">Yanis Flitti</div>
-      </div>
-    </button>
+  <!-- Fond du tiroir de navigation (demi-écran et mobile) -->
+  <div x-show="navOpen" x-cloak @click="navOpen = false" class="fixed inset-0 z-40 bg-slate-900/40"></div>
+
+  <aside class="sb hidden md:flex flex-col shrink-0 h-screen sticky top-0 overflow-y-auto bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800"
+    :class="navOpen && 'sb-open'">
+    <div class="flex items-center">
+      <button @click="selectTab('home')" class="sb-item px-5 py-5 flex items-center gap-2.5 hover:opacity-80 transition text-left w-full">
+        <div class="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 grid place-items-center text-white font-bold">J</div>
+        <div class="sb-label">
+          <div class="font-semibold leading-tight">JobHunter</div>
+          <div class="text-[11px] text-slate-400">Yanis Flitti</div>
+        </div>
+      </button>
+      <button x-show="navOpen" @click="navOpen = false" title="Fermer le menu"
+        class="mr-3 w-8 h-8 shrink-0 rounded-lg grid place-items-center text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
+    </div>
 
     <nav class="px-3 space-y-0.5 mt-2">
       <template x-for="tab in tabs" :key="tab.id">
-        <button @click="selectTab(tab.id)"
-          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition"
-          :class="activeTab === tab.id
+        <button @click="selectTab(tab.id)" :title="tab.label"
+          class="sb-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition"
+          :class="activeTab === tab.id && !isApplicationsView()
             ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 font-medium'
             : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'">
           <span x-text="tab.icon" class="text-base"></span>
-          <span x-text="tab.label"></span>
-          <span class="ml-auto text-[11px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800"
+          <span class="sb-label" x-text="tab.label"></span>
+          <span class="sb-label ml-auto text-[11px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800"
             x-text="tabCount(tab.id)"></span>
         </button>
       </template>
     </nav>
 
-    <div class="px-3 mt-6">
-      <div class="text-[11px] uppercase tracking-wider text-slate-400 px-3 mb-2">Suivi</div>
-      <button @click="showApplications()"
-        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">
-        <span>📮</span><span>Candidatures</span>
-        <span class="ml-auto text-[11px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800" x-text="stats.par_statut?.applied || 0"></span>
+    <div class="px-3 mt-6 space-y-0.5">
+      <div class="sb-label text-[11px] uppercase tracking-wider text-slate-400 px-3 mb-2">Suivi</div>
+      <button @click="showApplications()" title="Candidatures"
+        class="sb-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition"
+        :class="isApplicationsView()
+          ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 font-medium'
+          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'">
+        <span>📮</span><span class="sb-label">Candidatures</span>
+        <span class="sb-label ml-auto text-[11px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800" x-text="stats.par_statut?.applied || 0"></span>
       </button>
-      <button @click="showRelances()"
-        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">
-        <span>🔔</span><span>À relancer</span>
-        <span class="ml-auto text-[11px] px-1.5 py-0.5 rounded-md"
+      <button @click="showRelances()" title="À relancer"
+        class="sb-item relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition"
+        :class="activeTab === 'relances'
+          ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 font-medium'
+          : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'">
+        <span>🔔</span><span class="sb-label">À relancer</span>
+        <span class="sb-label ml-auto text-[11px] px-1.5 py-0.5 rounded-md"
           :class="relances.length ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' : 'bg-slate-100 dark:bg-slate-800'"
           x-text="relances.length"></span>
+        <!-- Pastille visible en mode icônes seules -->
+        <span x-show="relances.length" class="sb-mini absolute top-1.5 right-3 w-2 h-2 rounded-full bg-amber-500"></span>
       </button>
     </div>
 
-    <div class="px-3 mt-6 min-h-0 flex flex-col">
-      <div class="flex items-center px-3 mb-2">
-        <span class="text-[11px] uppercase tracking-wider text-slate-400">Mes documents</span>
-        <label class="ml-auto text-xs text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-          :class="docs.uploading && 'opacity-50 pointer-events-none'">
-          <span x-text="docs.uploading ? 'Envoi...' : '+ Ajouter'"></span>
-          <input type="file" class="hidden" accept=".pdf,.docx,.odt,.png,.jpg"
-            @change="uploadAttachment($event)">
-        </label>
-      </div>
-      <p x-show="docs.error" x-text="docs.error" class="px-3 mb-1 text-[11px] text-red-600"></p>
-      <div class="space-y-0.5 overflow-y-auto">
-        <template x-for="a in attachments" :key="a.id">
-          <div class="group flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
-            <button @click="toggleDefault(a)"
-              :title="a.is_default ? 'Joint par défaut — cliquer pour retirer' : 'Joindre par défaut aux candidatures'"
-              :class="a.is_default ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600 hover:text-amber-400'"
-              x-text="a.is_default ? '★' : '☆'"></button>
-            <span class="truncate flex-1 text-slate-600 dark:text-slate-400" :title="a.filename + ' · ' + formatSize(a.size)" x-text="a.filename"></span>
-            <button @click="deleteAttachment(a)" title="Supprimer"
-              class="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition">✕</button>
-          </div>
-        </template>
-        <p x-show="attachments.length === 0" class="px-3 text-[11px] text-slate-400">
-          CV, lettre... (pdf, docx, odt, png, jpg — 5 Mo max)
-        </p>
+    <div class="px-3 mt-6">
+      <!-- Mode icônes seules : les documents s'ouvrent dans le tiroir -->
+      <button @click="navOpen = true" title="Mes documents"
+        class="sb-mini sb-item w-full items-center py-2.5 rounded-xl text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">📎</button>
+
+      <div class="sb-label">
+        <div class="flex items-center px-3 mb-2">
+          <span class="text-[11px] uppercase tracking-wider text-slate-400">Mes documents</span>
+          <label class="ml-auto text-xs text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+            :class="docs.uploading && 'opacity-50 pointer-events-none'">
+            <span x-text="docs.uploading ? 'Envoi...' : '+ Ajouter'"></span>
+            <input type="file" class="hidden" accept=".pdf,.docx,.odt,.png,.jpg"
+              @change="uploadAttachment($event)">
+          </label>
+        </div>
+        <p x-show="docs.error" x-text="docs.error" class="px-3 mb-1 text-[11px] text-red-600"></p>
+        <div class="space-y-0.5">
+          <template x-for="a in attachments" :key="a.id">
+            <div class="group flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
+              <button @click="toggleDefault(a)"
+                :title="a.is_default ? 'Joint par défaut — cliquer pour retirer' : 'Joindre par défaut aux candidatures'"
+                :class="a.is_default ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600 hover:text-amber-400'"
+                x-text="a.is_default ? '★' : '☆'"></button>
+              <span class="truncate flex-1 text-slate-600 dark:text-slate-400" :title="a.filename + ' · ' + formatSize(a.size)" x-text="a.filename"></span>
+              <button @click="deleteAttachment(a)" title="Supprimer"
+                class="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 focus:opacity-100 transition">✕</button>
+            </div>
+          </template>
+          <p x-show="attachments.length === 0" class="px-3 text-[11px] text-slate-400">
+            CV, lettre... (pdf, docx, odt, png, jpg — 5 Mo max)
+          </p>
+        </div>
       </div>
     </div>
 
-    <div class="mt-auto p-3 space-y-2">
-      <button @click="dark = !dark; localStorage.setItem('jh_dark', dark)"
-        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">
+    <div class="mt-auto p-3 space-y-0.5">
+      <button @click="navOpen = true" title="Déplier le menu"
+        class="sb-mini sb-item w-full items-center py-2.5 rounded-xl text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">»</button>
+      <button @click="dark = !dark; localStorage.setItem('jh_dark', dark)" :title="dark ? 'Mode clair' : 'Mode sombre'"
+        class="sb-item w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">
         <span x-text="dark ? '☀️' : '🌙'"></span>
-        <span x-text="dark ? 'Mode clair' : 'Mode sombre'"></span>
+        <span class="sb-label" x-text="dark ? 'Mode clair' : 'Mode sombre'"></span>
       </button>
     </div>
   </aside>
@@ -104,19 +143,20 @@
 
     <header class="sticky top-0 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur border-b border-slate-200 dark:border-slate-800">
       <div class="px-4 lg:px-6 py-3.5 flex items-center gap-3 flex-wrap">
-        <div class="lg:hidden font-semibold">JobHunter</div>
-        <div class="hidden lg:block">
-          <h1 class="text-lg font-semibold" x-text="currentTab().label"></h1>
-          <p class="text-xs text-slate-400" x-text="jobs.length + ' offres affichées'"></p>
+        <button @click="navOpen = true" title="Menu"
+          class="md:hidden w-9 h-9 rounded-xl grid place-items-center bg-slate-100 dark:bg-slate-800">☰</button>
+        <div class="min-w-0">
+          <h1 class="text-lg font-semibold truncate" x-text="viewTitle()"></h1>
+          <p class="text-xs text-slate-400" x-show="isListView()" x-text="resultLabel()"></p>
         </div>
 
-        <input type="search" x-model="search" @input.debounce.300ms="page = 0; load()"
+        <input type="search" x-model="search" @input.debounce.300ms="onSearch()" x-show="isListView() || activeTab === 'home'"
           placeholder="Rechercher un poste, une société, une ville..."
           class="flex-1 min-w-[180px] max-w-md px-3.5 py-2 text-sm rounded-xl bg-slate-100 dark:bg-slate-800 border border-transparent focus:border-indigo-400 focus:bg-white dark:focus:bg-slate-900 outline-none transition">
 
         <div class="ml-auto flex gap-2">
           <button @click="dark = !dark; localStorage.setItem('jh_dark', dark)"
-            class="lg:hidden px-3 py-2 text-sm rounded-xl bg-slate-100 dark:bg-slate-800"
+            class="md:hidden px-3 py-2 text-sm rounded-xl bg-slate-100 dark:bg-slate-800"
             x-text="dark ? '☀️' : '🌙'"></button>
           <button @click="rescore()" :disabled="busy"
             class="px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">
@@ -130,40 +170,49 @@
         </div>
       </div>
 
-      <div class="lg:hidden px-4 pb-3 flex gap-1.5 overflow-x-auto">
+      <!-- Sous 768 px : onglets en barre horizontale défilante -->
+      <div class="md:hidden px-4 pb-3 flex gap-1.5 overflow-x-auto">
         <template x-for="tab in tabs" :key="tab.id">
           <button @click="selectTab(tab.id)"
             class="px-3 py-1.5 text-sm rounded-lg whitespace-nowrap transition"
-            :class="activeTab === tab.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'"
+            :class="activeTab === tab.id && !isApplicationsView() ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'"
             x-text="tab.label"></button>
         </template>
+        <button @click="showApplications()"
+          class="px-3 py-1.5 text-sm rounded-lg whitespace-nowrap transition"
+          :class="isApplicationsView() ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'">Candidatures</button>
+        <button @click="showRelances()"
+          class="px-3 py-1.5 text-sm rounded-lg whitespace-nowrap transition"
+          :class="activeTab === 'relances' ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'"
+          x-text="'À relancer' + (relances.length ? ' (' + relances.length + ')' : '')"></button>
       </div>
     </header>
 
     <main class="px-4 lg:px-6 py-5 space-y-5">
 
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <!-- Deux colonnes jusqu'à 1280 px : quatre cartes écrasées sur demi-écran sinon -->
+      <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
         <template x-for="kpi in kpis()" :key="kpi.label">
           <button @click="applyKpi(kpi)"
-            class="text-left bg-white dark:bg-slate-900 rounded-2xl p-4 border transition hover:shadow-md"
-            :class="filters.status === kpi.status && kpi.status !== ''
+            class="min-w-0 text-left bg-white dark:bg-slate-900 rounded-2xl p-4 border transition hover:shadow-md"
+            :class="filters.status === kpi.status && kpi.status !== '' && isListView()
               ? 'border-indigo-400 dark:border-indigo-500 ring-2 ring-indigo-100 dark:ring-indigo-500/20'
               : 'border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700'">
-            <div class="flex items-start justify-between">
-              <div>
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
                 <div class="text-2xl font-bold" x-text="kpi.value"></div>
-                <div class="text-xs text-slate-400 mt-0.5" x-text="kpi.label"></div>
+                <div class="text-xs text-slate-400 mt-0.5 truncate" x-text="kpi.label"></div>
               </div>
-              <div class="w-9 h-9 rounded-xl grid place-items-center text-base" :class="kpi.bg" x-text="kpi.icon"></div>
+              <div class="w-9 h-9 shrink-0 rounded-xl grid place-items-center text-base" :class="kpi.bg" x-text="kpi.icon"></div>
             </div>
-            <div class="text-[11px] mt-2" :class="filters.status === kpi.status && kpi.status !== '' ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'"
-              x-text="filters.status === kpi.status && kpi.status !== '' ? 'Filtre actif — cliquer pour retirer' : kpi.hint"></div>
+            <div class="text-[11px] mt-2 truncate" :class="filters.status === kpi.status && kpi.status !== '' && isListView() ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'"
+              x-text="filters.status === kpi.status && kpi.status !== '' && isListView() ? 'Filtre actif — cliquer pour retirer' : kpi.hint"></div>
           </button>
         </template>
       </div>
 
-      <div class="flex gap-2 flex-wrap items-center text-sm" x-show="!['stats','home'].includes(activeTab)">
-        <select x-model="filters.metier" @change="load()"
+      <div class="flex gap-2 flex-wrap items-center text-sm" x-show="isListView()">
+        <select x-model="filters.metier" @change="page = 0; load()"
           class="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 outline-none">
           <option value="">Tous les métiers</option>
           <option value="support">💻 Support</option>
@@ -172,7 +221,7 @@
           <option value="autre">📋 Autre</option>
         </select>
 
-        <select x-model="filters.status" @change="load()"
+        <select x-model="filters.status" @change="page = 0; load()"
           class="px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 outline-none">
           <option value="">Tous les statuts</option>
           <option value="new">Nouvelle</option>
@@ -181,22 +230,33 @@
           <option value="followed_up">Relancé</option>
           <option value="interview">Entretien</option>
           <option value="rejected">Refusé</option>
+          <option value="ignored">Ignoré</option>
         </select>
 
-        <select x-model="filters.age" @change="load()"
+        <!-- Zones proposées selon l'onglet : jamais de combinaison vide par construction -->
+        <select @change="filters.zone = $event.target.value; page = 0; load()" :disabled="zoneOptions().length < 2"
+          title="Zone géographique"
+          class="px-3 py-2 rounded-xl border outline-none transition disabled:opacity-70"
+          :class="filters.zone ? 'bg-violet-50 dark:bg-violet-500/10 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 font-medium' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'">
+          <template x-for="o in zoneOptions()" :key="o.value">
+            <option :value="o.value" :selected="o.value === filters.zone" x-text="o.label"></option>
+          </template>
+        </select>
+
+        <!-- Sur les candidatures, la date utile est celle de l'envoi, pas celle de l'annonce -->
+        <select x-model="filters.age" @change="page = 0; load()"
+          :title="appliedDateMode() ? 'Filtre sur la date de candidature' : 'Filtre sur la date de publication'"
           class="px-3 py-2 rounded-xl border outline-none transition"
           :class="filters.age ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-medium' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'">
-          <option value="">Toutes les dates</option>
-          <option value="1">Aujourd'hui</option>
-          <option value="3">3 derniers jours</option>
-          <option value="7">Cette semaine</option>
-          <option value="14">2 dernières semaines</option>
-          <option value="30">Ce mois-ci</option>
+          <option value="" x-text="appliedDateMode() ? 'Toutes les dates d\'envoi' : 'Toutes les dates'"></option>
+          <template x-for="o in dateOptions" :key="o.value">
+            <option :value="o.value" :selected="o.value === filters.age" x-text="appliedDateMode() ? o.applied : o.published"></option>
+          </template>
         </select>
 
         <div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
           <span class="text-slate-400 text-xs">Score ≥</span>
-          <input type="range" x-model.number="filters.min_score" @change="load()" min="0" max="90" step="5" class="w-24 accent-indigo-600">
+          <input type="range" x-model.number="filters.min_score" @change="page = 0; load()" min="0" max="90" step="5" class="w-24 accent-indigo-600">
           <span class="font-medium w-6 text-center" x-text="filters.min_score"></span>
         </div>
 
@@ -295,10 +355,11 @@
             <h2 class="font-semibold">À relancer</h2>
             <span class="px-2 py-0.5 rounded-md text-[11px] bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
               x-text="relances.length + ' en attente'"></span>
+            <button @click="showRelances()" class="ml-auto text-xs text-indigo-600 dark:text-indigo-400 hover:underline">Tout voir →</button>
           </div>
-          <p class="text-xs text-slate-400 mb-4">Candidatures sans réponse depuis plus de 10 jours</p>
+          <p class="text-xs text-slate-400 mb-4" x-text="'Candidatures sans réponse depuis plus de ' + relanceDays() + ' jours'"></p>
           <div class="space-y-2">
-            <template x-for="r in relances" :key="r.job_id">
+            <template x-for="r in relances.slice(0, 3)" :key="r.job_id">
               <div class="flex items-center gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20">
                 <div class="min-w-0 flex-1">
                   <div class="text-sm font-medium truncate" x-text="r.title"></div>
@@ -326,7 +387,9 @@
         </div>
       </div>
 
-      <div x-show="activeTab === 'stats' && an" x-cloak class="space-y-5">
+      <!-- x-if : les graphiques lisent an.*, absent tant que /analytics n'a pas répondu -->
+      <div x-show="activeTab === 'stats'" x-cloak>
+        <template x-if="an"><div class="space-y-5">
 
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5">
           <h2 class="font-semibold mb-1">Entonnoir de conversion</h2>
@@ -426,106 +489,169 @@
             </div>
           </div>
         </div>
+        </div></template>
       </div>
 
       <div x-show="busy" class="py-16 text-center text-slate-400 text-sm">Chargement...</div>
 
-      <div x-show="!busy && !['stats','home'].includes(activeTab)" class="space-y-2.5">
+      <!-- Liste d'offres : onglets, Candidatures -->
+      <div x-show="!busy && isListView()" class="space-y-2.5">
         <template x-for="job in jobs" :key="job.id">
-          <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 hover:border-indigo-300 dark:hover:border-indigo-700 transition group">
-            <div class="flex gap-4 items-start flex-wrap sm:flex-nowrap">
+          <div class="bg-white dark:bg-slate-900 rounded-2xl border p-4 transition group"
+            :class="isOverdue(job)
+              ? 'border-amber-300 dark:border-amber-500/40 bg-amber-50/60 dark:bg-amber-500/5 hover:border-amber-400'
+              : 'border-slate-200 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700'">
+            <div class="flex gap-4 items-start">
 
               <div class="w-12 h-12 rounded-xl grid place-items-center font-bold text-sm shrink-0"
                 :class="scoreClass(job.score)">
                 <span x-text="job.score"></span>
               </div>
 
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2 flex-wrap">
-                  <h3 class="font-semibold truncate" x-text="job.title"></h3>
-                  <span class="px-2 py-0.5 rounded-md text-[11px] font-medium shrink-0"
-                    :class="sourceBadge(job.source_name).cls"
-                    x-text="sourceBadge(job.source_name).label"></span>
+              <!-- Sous 1280 px, les boutons passent sous le texte au lieu de déborder -->
+              <div class="min-w-0 flex-1 flex flex-col xl:flex-row xl:items-start gap-3">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <h3 class="font-semibold truncate min-w-0" x-text="job.title" :title="job.title"></h3>
+                    <span class="px-2 py-0.5 rounded-md text-[11px] font-medium shrink-0"
+                      :class="sourceBadge(job.source_name).cls"
+                      x-text="sourceBadge(job.source_name).label"></span>
+                  </div>
+
+                  <div class="flex items-center gap-x-2.5 gap-y-1 mt-1 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
+                    <span x-text="job.company || 'Société non précisée'"></span>
+                    <span>·</span>
+                    <span x-text="job.location || '-'"></span>
+                    <span x-show="job.contract_type">·</span>
+                    <span x-show="job.contract_type" class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800" x-text="job.contract_type"></span>
+                    <span x-show="job.country === 'CH'" class="px-1.5 py-0.5 rounded bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400">🇨🇭 Suisse</span>
+                  </div>
+
+                  <div class="flex items-center gap-x-2 gap-y-1 mt-2 flex-wrap">
+                    <span class="px-2 py-0.5 rounded-md text-[11px]" :class="statusBadge(job.status).cls" x-text="statusBadge(job.status).label"></span>
+                    <span class="text-[11px] text-slate-400" x-text="zoneLabel(job.zone)"></span>
+                    <span x-show="job.applied_at && isAppliedStatus(job.status)"
+                      class="text-[11px] font-medium text-emerald-700 dark:text-emerald-400" x-text="appliedLabel(job.applied_at)"></span>
+                    <span x-show="!(job.applied_at && isAppliedStatus(job.status)) && job.published_at"
+                      class="text-[11px] text-slate-400" x-text="'Publiée ' + timeAgo(job.published_at)"></span>
+                    <span x-show="isOverdue(job)"
+                      class="px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
+                      x-text="'Sans réponse depuis plus de ' + relanceDays() + ' jours'"></span>
+                  </div>
                 </div>
 
-                <div class="flex items-center gap-2.5 mt-1 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
-                  <span x-text="job.company || 'Société non précisée'"></span>
-                  <span>·</span>
-                  <span x-text="job.location || '-'"></span>
-                  <span x-show="job.contract_type">·</span>
-                  <span x-show="job.contract_type" class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800" x-text="job.contract_type"></span>
-                  <span x-show="job.country === 'CH'" class="px-1.5 py-0.5 rounded bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400">🇨🇭 Frontalier</span>
+                <div class="flex gap-2 flex-wrap xl:flex-nowrap xl:shrink-0">
+                  <button @click="openDraft(job)"
+                    class="px-3.5 py-2 text-sm rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium">
+                    Candidature
+                  </button>
+                  <a :href="job.url" target="_blank" rel="noopener"
+                    class="px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-center"
+                    :title="'Ouvrir sur ' + sourceBadge(job.source_name).label">
+                    Ouvrir ↗
+                  </a>
+                  <select :value="job.status" @change="setStatus(job, $event.target.value)" title="Changer le statut"
+                    class="px-2 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none">
+                    <option value="new">Nouvelle</option>
+                    <option value="drafted">Brouillon</option>
+                    <option value="applied">Postulé</option>
+                    <option value="followed_up">Relancé</option>
+                    <option value="interview">Entretien</option>
+                    <option value="rejected">Refusé</option>
+                    <option value="ignored">Ignoré</option>
+                  </select>
                 </div>
-
-                <div class="flex items-center gap-2 mt-2">
-                  <span class="px-2 py-0.5 rounded-md text-[11px]" :class="statusBadge(job.status).cls" x-text="statusBadge(job.status).label"></span>
-                  <span class="text-[11px] text-slate-400" x-text="zoneLabel(job.zone)"></span>
-                  <span class="text-[11px] text-slate-400" x-show="job.published_at" x-text="timeAgo(job.published_at)"></span>
-                </div>
-              </div>
-
-              <div class="flex gap-2 shrink-0 w-full sm:w-auto">
-                <button @click="openDraft(job)"
-                  class="flex-1 sm:flex-none px-3.5 py-2 text-sm rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium">
-                  Candidature
-                </button>
-                <a :href="job.url" target="_blank" rel="noopener"
-                  class="flex-1 sm:flex-none px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-center"
-                  :title="'Ouvrir sur ' + sourceBadge(job.source_name).label">
-                  Ouvrir ↗
-                </a>
-                <select :value="job.status" @change="setStatus(job, $event.target.value)"
-                  class="px-2 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 outline-none">
-                  <option value="new">Nouvelle</option>
-                  <option value="drafted">Brouillon</option>
-                  <option value="applied">Postulé</option>
-                  <option value="followed_up">Relancé</option>
-                  <option value="interview">Entretien</option>
-                  <option value="rejected">Refusé</option>
-                  <option value="ignored">Ignoré</option>
-                </select>
               </div>
             </div>
           </div>
         </template>
 
-        <div x-show="jobs.length === 0" class="py-16 text-center">
+        <!-- Zéro résultat : on dit pourquoi et on propose d'en sortir -->
+        <div x-show="jobs.length === 0" class="py-14 px-4 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
           <div class="text-4xl mb-2">🔍</div>
-          <p class="text-slate-400 text-sm">Aucune offre pour ces filtres</p>
-          <button @click="resetFilters()" class="mt-3 text-sm text-indigo-600 hover:underline">Réinitialiser les filtres</button>
+          <p class="text-sm font-medium" x-text="isApplicationsView() ? 'Aucune candidature pour ces critères' : 'Aucune offre pour ces critères'"></p>
+          <p class="text-xs text-slate-400 mt-1" x-text="describeFilters()"></p>
+          <p class="text-xs text-slate-400 mt-1" x-show="!filters.status">
+            Les offres déjà traitées (postulées, refusées, ignorées…) n'apparaissent que dans « Candidatures » ou via le filtre de statut.
+          </p>
+          <button @click="resetFilters()" class="mt-4 px-4 py-2 text-sm rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium">Réinitialiser les filtres</button>
         </div>
       </div>
 
-      <div class="flex gap-2 items-center justify-center pt-2" x-show="!busy && jobs.length > 0 && !['stats','home'].includes(activeTab)">
+      <div class="flex gap-2 items-center justify-center pt-2" x-show="!busy && jobs.length > 0 && isListView()">
         <button @click="page > 0 && (page--, load())" :disabled="page === 0"
           class="px-4 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40">←</button>
-        <span class="text-sm text-slate-400" x-text="'Page ' + (page + 1)"></span>
-        <button @click="page++; load()" :disabled="jobs.length < limit"
+        <span class="text-sm text-slate-400" x-text="'Page ' + (page + 1) + ' / ' + Math.max(1, Math.ceil(total / limit))"></span>
+        <button @click="page++; load()" :disabled="(page + 1) * limit >= total"
           class="px-4 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40">→</button>
+      </div>
+
+      <!-- Vue « À relancer » : la sélection est faite côté serveur par tracker.jobs_a_relancer -->
+      <div x-show="activeTab === 'relances'" x-cloak class="space-y-2.5">
+        <p class="text-sm text-slate-500 dark:text-slate-400"
+          x-text="'Candidatures envoyées depuis plus de ' + relanceDays() + ' jours, toujours au statut « Postulé ». Clique sur une carte pour rouvrir la candidature.'"></p>
+
+        <template x-for="r in relances" :key="r.job_id">
+          <div role="button" tabindex="0" @click="openDraft(r)" @keydown.enter.self="openDraft(r)"
+            class="cursor-pointer bg-white dark:bg-slate-900 rounded-2xl border border-amber-300 dark:border-amber-500/40 p-4 hover:shadow-md hover:border-amber-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition">
+            <div class="flex gap-4 items-start">
+              <div class="w-12 h-12 rounded-xl grid place-items-center shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 leading-none text-center">
+                <div><div class="font-bold" x-text="r.jours"></div><div class="text-[9px] mt-0.5">jours</div></div>
+              </div>
+              <div class="min-w-0 flex-1 flex flex-col xl:flex-row xl:items-start gap-3">
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <h3 class="font-semibold truncate min-w-0" x-text="r.title" :title="r.title"></h3>
+                    <span class="px-2 py-0.5 rounded-md text-[11px] font-medium shrink-0" :class="sourceBadge(r.source_name).cls" x-text="sourceBadge(r.source_name).label"></span>
+                  </div>
+                  <div class="text-xs text-slate-500 dark:text-slate-400 mt-1" x-text="(r.company || 'Société non précisée') + ' · ' + (r.location || '-')"></div>
+                  <div class="text-[11px] font-medium text-amber-700 dark:text-amber-400 mt-2" x-text="appliedLabel(r.applied_at)"></div>
+                </div>
+                <div class="flex gap-2 flex-wrap xl:flex-nowrap xl:shrink-0">
+                  <button @click.stop="openDraft(r)"
+                    class="px-3.5 py-2 text-sm rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium">Candidature</button>
+                  <a :href="r.url" target="_blank" rel="noopener" @click.stop
+                    class="px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800">Ouvrir ↗</a>
+                  <button @click.stop="markFollowedUp(r.job_id)"
+                    class="px-3.5 py-2 text-sm rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium">Marquer relancé</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <div x-show="relances.length === 0" class="py-14 px-4 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+          <div class="text-4xl mb-2">✅</div>
+          <p class="text-sm font-medium">Aucune candidature à relancer</p>
+          <p class="text-xs text-slate-400 mt-1" x-text="'Une candidature apparaît ici ' + relanceDays() + ' jours après l\'envoi, si elle est toujours sans réponse.'"></p>
+          <button @click="showApplications()" class="mt-4 text-sm text-indigo-600 dark:text-indigo-400 hover:underline">Voir toutes mes candidatures</button>
+        </div>
       </div>
     </main>
   </div>
 </div>
 
+<!-- Modale de candidature : centrée, en-tête et pied fixes, contenu défilant -->
 <div x-show="modal.open" x-cloak
-  class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 flex items-start justify-center p-4 overflow-y-auto"
-  @click.self="modal.open = false" @keydown.escape.window="modal.open = false">
-  <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-3xl w-full my-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+  class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 flex items-center justify-center p-2 sm:p-4"
+  @click.self="modal.open = false" @keydown.escape.window="onEscape()">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-3xl w-full flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800"
+    style="max-height: calc(100dvh - 1rem)" role="dialog" aria-modal="true" :aria-label="modal.job?.title">
 
-    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-start gap-4">
+    <div class="shrink-0 px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-start gap-4">
       <div class="min-w-0">
-        <div class="flex items-center gap-2">
-          <h2 class="font-semibold truncate" x-text="modal.job?.title"></h2>
+        <div class="flex items-center gap-2 min-w-0">
+          <h2 class="font-semibold truncate min-w-0" x-text="modal.job?.title" :title="modal.job?.title"></h2>
           <span class="px-2 py-0.5 rounded-md text-[11px] font-medium shrink-0"
             :class="sourceBadge(modal.job?.source_name).cls"
             x-text="sourceBadge(modal.job?.source_name).label"></span>
         </div>
         <p class="text-sm text-slate-500 truncate" x-text="(modal.job?.company || '') + ' · ' + (modal.job?.location || '')"></p>
       </div>
-      <button @click="modal.open = false" class="ml-auto w-8 h-8 rounded-lg grid place-items-center text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
+      <button @click="modal.open = false" title="Fermer" class="ml-auto shrink-0 w-8 h-8 rounded-lg grid place-items-center text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">✕</button>
     </div>
 
-    <div class="px-5 py-4 space-y-4">
+    <div class="px-5 py-4 space-y-4 overflow-y-auto overscroll-contain min-h-0 flex-1">
       <div x-show="modal.loading" class="py-10 text-center">
         <div class="text-sm text-slate-500">Génération de la candidature...</div>
       </div>
@@ -563,8 +689,25 @@
               <label class="block text-sm font-medium mb-1.5">Destinataire</label>
               <input type="email" x-model="modal.to" placeholder="adresse@entreprise.fr"
                 class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-indigo-400 outline-none">
-              <p class="text-[11px] text-slate-400 mt-1"
-                x-text="modal.job?.contact_email ? 'Pré-rempli depuis l\'offre, modifiable' : 'Aucune adresse dans l\'offre : à saisir'"></p>
+
+              <p x-show="isEmail(modal.job?.contact_email)" class="text-[11px] text-slate-400 mt-1">
+                Adresse publiée dans l'annonce, modifiable.
+              </p>
+
+              <!-- Pas d'adresse connue : on la cherche dans le texte de l'annonce, et seulement là -->
+              <div x-show="!isEmail(modal.job?.contact_email)" class="mt-1.5 space-y-1.5">
+                <p x-show="modal.job?.contact_email" class="text-[11px] text-slate-500 dark:text-slate-400">
+                  L'annonce indique : <span class="italic" x-text="modal.job?.contact_email"></span>
+                </p>
+                <button x-show="modal.contactSearch !== 'notfound'" @click="detectContact()" :disabled="modal.contactSearch === 'searching'"
+                  class="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50"
+                  x-text="modal.contactSearch === 'searching' ? 'Recherche…' : 'Chercher une adresse dans l\'annonce'"></button>
+                <div x-show="modal.contactSearch === 'notfound'"
+                  class="text-[11px] leading-relaxed text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg px-2.5 py-2">
+                  Aucune adresse publiée dans l'annonce. Postule via le formulaire officiel avec
+                  « Ouvrir l'offre ↗ », ou saisis ci-dessus une adresse que le recruteur t'a lui-même communiquée.
+                </div>
+              </div>
             </div>
             <div>
               <p class="text-sm font-medium mb-1.5">Pièces jointes</p>
@@ -611,7 +754,7 @@
       </template>
     </div>
 
-    <div class="px-5 py-4 border-t border-slate-200 dark:border-slate-800 flex gap-2 flex-wrap items-center" x-show="modal.draft">
+    <div class="shrink-0 px-5 py-4 border-t border-slate-200 dark:border-slate-800 flex gap-2 flex-wrap items-center" x-show="modal.draft">
       <button @click="saveDraft()" :disabled="modal.saving"
         class="px-4 py-2.5 text-sm rounded-xl bg-slate-800 dark:bg-slate-700 text-white font-medium hover:bg-slate-900 disabled:opacity-50">
         Enregistrer mes corrections
@@ -623,22 +766,67 @@
       </button>
       <a :href="modal.job?.url" target="_blank" rel="noopener"
         class="px-4 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800">
-        Postuler sur le site ↗
+        Ouvrir l'offre ↗
       </a>
       <span class="text-xs text-emerald-600" x-show="modal.message" x-text="modal.message"></span>
     </div>
   </div>
 </div>
 
+<!-- Confirmation intégrée (remplace confirm()) : le bouton par défaut est « Annuler » -->
+<div x-show="confirmDialog.open" x-cloak
+  class="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4"
+  @click.self="closeConfirm(false)">
+  <div class="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col"
+    style="max-height: calc(100dvh - 2rem)" role="alertdialog" aria-modal="true" :aria-label="confirmDialog.title">
+    <div class="px-5 pt-5 pb-3 overflow-y-auto min-h-0">
+      <h3 class="font-semibold" x-text="confirmDialog.title"></h3>
+      <template x-for="line in confirmDialog.lines" :key="line.label">
+        <div class="mt-2 text-sm">
+          <span class="text-slate-400" x-text="line.label + ' : '"></span>
+          <span class="break-words" x-text="line.value"></span>
+        </div>
+      </template>
+      <ul x-show="confirmDialog.items.length" class="mt-2 text-sm list-disc pl-5 space-y-0.5">
+        <template x-for="item in confirmDialog.items" :key="item"><li class="break-all" x-text="item"></li></template>
+      </ul>
+      <p x-show="confirmDialog.note" class="mt-3 text-xs text-slate-500 dark:text-slate-400" x-text="confirmDialog.note"></p>
+    </div>
+    <div class="shrink-0 px-5 py-4 flex justify-end gap-2 border-t border-slate-200 dark:border-slate-800">
+      <button x-ref="confirmCancel" @click="closeConfirm(false)"
+        class="px-4 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800">Annuler</button>
+      <button @click="closeConfirm(true)"
+        class="px-4 py-2 text-sm rounded-xl text-white font-medium"
+        :class="confirmDialog.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'"
+        x-text="confirmDialog.confirmLabel"></button>
+    </div>
+  </div>
+</div>
+
+<!-- Bandeau temporaire (remplace alert()) -->
+<div x-show="toast.show" x-cloak x-transition.opacity role="status" aria-live="polite"
+  class="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] max-w-[calc(100vw-2rem)] px-4 py-2.5 rounded-xl shadow-lg text-sm font-medium flex items-center gap-3"
+  :class="toast.kind === 'error' ? 'bg-red-600 text-white' : 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'">
+  <span x-text="toast.text"></span>
+  <button @click="toast.show = false" class="opacity-70 hover:opacity-100" title="Fermer">✕</button>
+</div>
+
 <script>
+// Statuts qui supposent une candidature envoyée (même liste que APPLIED_STATUSES côté API)
+const APPLIED_STATUSES = ['applied', 'followed_up', 'interview', 'rejected'];
+
 function jobhunter() {
   return {
-    jobs: [], stats: {}, relances: [], an: null, history: [], home: { drafts: [], top: [] },
-    busy: false, page: 0, limit: 40, search: '',
+    jobs: [], total: 0, stats: {}, relances: [], an: null, history: [], home: { drafts: [], top: [] },
+    busy: false, page: 0, limit: 40, search: '', loadSeq: 0,
     dark: localStorage.getItem('jh_dark') === 'true',
     activeTab: 'home',
-    filters: { metier: '', status: '', min_score: 60, age: '' },
-    modal: { open: false, job: null, draft: null, saved: null, to: '', attachmentIds: [], loading: false, saving: false, error: '', message: '' },
+    appView: false,      // vue « Candidatures » (onglet Toutes + statut de candidature)
+    navOpen: false,      // tiroir de navigation ouvert (demi-écran, mobile)
+    filters: { metier: '', status: '', min_score: 60, age: '', zone: '' },
+    modal: { open: false, job: null, draft: null, saved: null, to: '', attachmentIds: [], contactSearch: '', loading: false, saving: false, error: '', message: '' },
+    confirmDialog: { open: false, title: '', lines: [], items: [], note: '', confirmLabel: 'Confirmer', danger: false, resolve: null },
+    toast: { show: false, text: '', kind: 'info', timer: null },
     attachments: [], docs: { uploading: false, error: '' },
     // Statuts masqués des onglets (même liste que CLOSED_STATUSES côté API)
     closedStatuses: ['applied', 'followed_up', 'interview', 'rejected', 'ignored'],
@@ -652,6 +840,15 @@ function jobhunter() {
       { id: 'stats',      label: 'Statistiques', icon: '📈' },
     ],
 
+    // Libellés selon la date filtrée : publication de l'annonce ou envoi de la candidature
+    dateOptions: [
+      { value: '1',  published: "Aujourd'hui",          applied: "Postulé aujourd'hui" },
+      { value: '3',  published: '3 derniers jours',     applied: 'Postulé ces 3 derniers jours' },
+      { value: '7',  published: 'Cette semaine',        applied: 'Postulé cette semaine' },
+      { value: '14', published: '2 dernières semaines', applied: 'Postulé ces 2 semaines' },
+      { value: '30', published: 'Ce mois-ci',           applied: 'Postulé ce mois-ci' },
+    ],
+
     async init() {
       await this.loadStats();
       await this.loadRelances();
@@ -659,70 +856,175 @@ function jobhunter() {
       await this.loadAttachments();
     },
 
+    // --- Vues ---
+
+    isListView() { return !['home', 'stats', 'relances'].includes(this.activeTab); },
+    isApplicationsView() { return this.appView && this.activeTab === 'toutes'; },
+    appliedDateMode() { return APPLIED_STATUSES.includes(this.filters.status); },
+    isAppliedStatus(s) { return APPLIED_STATUSES.includes(s); },
+
+    currentTab() { return this.tabs.find(t => t.id === this.activeTab) || this.tabs[0]; },
+
+    viewTitle() {
+      if (this.activeTab === 'relances') return 'À relancer';
+      if (this.isApplicationsView()) return 'Candidatures';
+      return this.currentTab().label;
+    },
+
+    resultLabel() {
+      const n = this.total;
+      const what = this.isApplicationsView() ? 'candidature' : 'offre';
+      return `${n} ${what}${n > 1 ? 's' : ''}` + (n > this.jobs.length ? ` · ${this.jobs.length} affichées` : '');
+    },
+
+    selectTab(id) {
+      this.activeTab = id;
+      this.appView = false;
+      this.navOpen = false;
+      this.page = 0;
+      this.filters = { metier: '', status: '', min_score: (id === 'suisse') ? 40 : 60, age: '', zone: '' };
+      // La Suisse n'a pas de bonus de zone : son meilleur score plafonne plus bas
+      this.search = '';
+      if (id === 'stats') { this.loadAnalytics(); return; }
+      if (id === 'home')  { this.loadHome(); return; }
+      this.load();
+    },
+
     showApplications() {
       this.activeTab = 'toutes';
-      this.filters = { metier: '', status: 'applied', min_score: 0, age: '' };
+      this.appView = true;
+      this.navOpen = false;
+      this.filters = { metier: '', status: 'applied', min_score: 0, age: '', zone: '' };
       this.search = '';
       this.page = 0;
       this.load();
     },
 
-    // Une offre sort de la liste courante si son nouveau statut ne correspond plus à la vue
-    hiddenInCurrentView(status) {
-      if (this.filters.status) return status !== this.filters.status;
-      return this.closedStatuses.includes(status);
+    async showRelances() {
+      this.activeTab = 'relances';
+      this.appView = false;
+      this.navOpen = false;
+      await this.loadRelances();
     },
 
-    removeFromList(jobId) {
-      this.jobs = this.jobs.filter(j => j.id !== jobId);
-      this.home.drafts = this.home.drafts.filter(j => j.id !== jobId);
-      this.home.top = this.home.top.filter(j => j.id !== jobId);
+    showRecent() {
+      this.activeTab = 'toutes';
+      this.appView = false;
+      this.filters = { metier: '', status: '', min_score: 60, age: '7', zone: '' };
+      this.page = 0;
+      this.load();
     },
 
-    async loadAttachments() {
-      try { this.attachments = await (await fetch('/attachments')).json(); } catch (e) { this.attachments = []; }
+    onSearch() {
+      // Une recherche lancée depuis l'accueil bascule sur la liste complète
+      if (!this.isListView()) { this.activeTab = 'toutes'; this.appView = false; }
+      this.page = 0;
+      this.load();
     },
 
-    async uploadAttachment(event) {
-      const file = event.target.files[0];
-      event.target.value = '';
-      if (!file) return;
-      this.docs = { uploading: true, error: '' };
-      try {
-        if (file.size > 5 * 1024 * 1024) throw new Error('Fichier trop volumineux (5 Mo max)');
-        const form = new FormData();
-        form.append('file', file);
-        const res = await fetch('/attachments', { method: 'POST', body: form });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "échec d'envoi");
-        await this.loadAttachments();
-      } catch (e) { this.docs.error = e.message; }
-      this.docs.uploading = false;
+    applyKpi(kpi) {
+      if (kpi.status === 'applied') { this.showApplications(); return; }
+      // Un second clic sur le même KPI retire le filtre
+      const active = this.isListView() && this.filters.status === kpi.status;
+      this.activeTab = 'toutes';
+      this.appView = false;
+      this.filters.status = active ? '' : kpi.status;
+      // Ces vues doivent montrer toutes les offres concernées, quel que soit le score
+      if (kpi.status) this.filters.min_score = 0;
+      this.page = 0;
+      this.load();
     },
 
-    async toggleDefault(a) {
-      const res = await fetch(`/attachments/${a.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_default: !a.is_default }),
-      });
-      if (res.ok) a.is_default = (await res.json()).is_default;
+    onEscape() {
+      if (this.confirmDialog.open) this.closeConfirm(false);
+      else if (this.modal.open) this.modal.open = false;
+      else this.navOpen = false;
     },
 
-    async deleteAttachment(a) {
-      if (!confirm(`Supprimer « ${a.filename} » ?`)) return;
-      const res = await fetch(`/attachments/${a.id}`, { method: 'DELETE' });
-      if (res.ok) {
-        this.attachments = this.attachments.filter(x => x.id !== a.id);
-        this.modal.attachmentIds = this.modal.attachmentIds.filter(id => id !== String(a.id));
+    // --- Filtres ---
+
+    tabParams() {
+      if (this.activeTab === 'france')     return { country: 'FR' };
+      if (this.activeTab === 'frontalier') return { zone: 'P2_FRONTALIER' };
+      if (this.activeTab === 'suisse')     return { country: 'CH' };
+      return {};
+    },
+
+    // Zones compatibles avec l'onglet : aucune combinaison vide par construction
+    zoneOptions() {
+      const all = [
+        { value: 'P1_IDF',        label: 'Île-de-France' },
+        { value: 'P2_FRONTALIER', label: 'Frontalier' },
+        { value: 'P3_FRANCE',     label: 'Reste de la France' },
+        { value: 'P4_SUISSE',     label: 'Suisse' },
+      ];
+      if (this.activeTab === 'frontalier') return [{ value: '', label: 'Zone frontalière' }];
+      if (this.activeTab === 'suisse')     return [{ value: '', label: 'Toute la Suisse' }];
+      if (this.activeTab === 'france')     return [{ value: '', label: 'Toute la France' }, ...all.filter(z => z.value !== 'P4_SUISSE')];
+      return [{ value: '', label: 'Toutes les zones' }, ...all];
+    },
+
+    filtersActive() {
+      return this.filters.metier !== '' || this.filters.age !== '' || this.filters.zone !== ''
+        || this.search.trim() !== '' || (this.filters.status !== '' && !(this.isApplicationsView() && this.filters.status === 'applied'));
+    },
+
+    describeFilters() {
+      const bits = [this.viewTitle()];
+      if (this.filters.status && !this.isApplicationsView()) bits.push('statut « ' + this.statusBadge(this.filters.status).label + ' »');
+      if (this.isApplicationsView() && this.filters.status !== 'applied') bits.push('statut « ' + this.statusBadge(this.filters.status).label + ' »');
+      if (this.filters.zone) bits.push(this.zoneLabel(this.filters.zone));
+      if (this.filters.age) {
+        const o = this.dateOptions.find(d => d.value === this.filters.age);
+        if (o) bits.push((this.appliedDateMode() ? o.applied : o.published).toLowerCase());
       }
+      if (this.filters.metier) bits.push('métier ' + this.filters.metier);
+      if (this.filters.min_score) bits.push('score ≥ ' + this.filters.min_score);
+      if (this.search.trim()) bits.push('« ' + this.search.trim() + ' »');
+      return 'Critères : ' + bits.join(' · ');
     },
 
-    formatSize(bytes) {
-      if (bytes < 1024) return bytes + ' o';
-      if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' Ko';
-      return (bytes / 1024 / 1024).toFixed(1) + ' Mo';
+    resetFilters() {
+      if (this.isApplicationsView()) { this.showApplications(); return; }
+      this.filters = { metier: '', status: '', min_score: this.activeTab === 'suisse' ? 40 : 60, age: '', zone: '' };
+      this.search = '';
+      this.page = 0;
+      this.load();
     },
+
+    async load() {
+      const seq = ++this.loadSeq;
+      this.busy = true;
+      const p = new URLSearchParams({
+        min_score: this.filters.min_score,
+        limit: this.limit,
+        offset: this.page * this.limit,
+        ...this.tabParams(),
+      });
+      if (this.filters.metier) p.set('metier', this.filters.metier);
+      if (this.filters.status) p.set('status', this.filters.status);
+      if (this.filters.zone) p.set('zone', this.filters.zone);
+      if (this.filters.age) p.set('max_age_days', this.filters.age);
+      // Sur les candidatures, la date et le tri portent sur l'envoi, pas sur l'annonce
+      if (this.appliedDateMode()) p.set('date_field', 'applied');
+      if (this.search.trim()) p.set('q', this.search.trim());
+
+      try {
+        const res = await fetch('/jobs?' + p);
+        const data = await res.json();
+        if (seq !== this.loadSeq) return;   // une requête plus récente a pris le relais
+        if (!res.ok) throw new Error(data.detail || 'chargement impossible');
+        this.jobs = data.items || [];
+        this.total = data.total ?? this.jobs.length;
+      } catch (e) {
+        if (seq !== this.loadSeq) return;
+        this.jobs = []; this.total = 0;
+        this.notify('Chargement des offres impossible : ' + e.message, 'error');
+      }
+      this.busy = false;
+    },
+
+    // --- Données ---
 
     async loadHome() {
       this.busy = true;
@@ -736,35 +1038,33 @@ function jobhunter() {
       this.busy = false;
     },
 
-    currentTab() { return this.tabs.find(t => t.id === this.activeTab) || this.tabs[0]; },
+    async loadStats() {
+      try { this.stats = await (await fetch('/stats')).json(); } catch (e) {}
+    },
+
+    async loadAnalytics() {
+      this.busy = true;
+      try { this.an = await (await fetch('/analytics')).json(); } catch (e) { this.an = null; }
+      this.busy = false;
+    },
+
+    async loadRelances() {
+      try { this.relances = await (await fetch('/relances')).json(); } catch (e) {}
+    },
+
+    async loadHistory(jobId) {
+      try { this.history = await (await fetch(`/jobs/${jobId}/history`)).json(); }
+      catch (e) { this.history = []; }
+    },
 
     tabCount(id) {
-      const z = this.stats.par_zone || {};
+      // Offres encore à traiter : les compteurs suivent ce que les onglets affichent
+      const z = this.stats.open_par_zone || {};
       if (id === 'france')     return (z.P1_IDF || 0) + (z.P3_FRANCE || 0) + (z.P2_FRONTALIER || 0);
       if (id === 'frontalier') return z.P2_FRONTALIER || 0;
       if (id === 'suisse')     return z.P4_SUISSE || 0;
       if (id === 'stats' || id === 'home') return '';
-      return this.stats.total || 0;
-    },
-
-    selectTab(id) {
-      this.activeTab = id;
-      this.page = 0;
-      this.filters.status = '';
-      this.filters.age = '';
-      this.search = '';
-      // La Suisse n'a pas de bonus de zone : son meilleur score plafonne plus bas
-      this.filters.min_score = (id === 'suisse') ? 40 : 60;
-      if (id === 'stats') { this.loadAnalytics(); return; }
-      if (id === 'home')  { this.loadHome(); return; }
-      this.load();
-    },
-
-    tabParams() {
-      if (this.activeTab === 'france')     return { country: 'FR' };
-      if (this.activeTab === 'frontalier') return { zone: 'P2_FRONTALIER' };
-      if (this.activeTab === 'suisse')     return { country: 'CH' };
-      return {};
+      return this.stats.open_total || 0;
     },
 
     kpis() {
@@ -792,98 +1092,162 @@ function jobhunter() {
       return bits.length ? bits.join(' · ') : `${this.stats.total || 0} offres en base, rien d'urgent`;
     },
 
+    // --- Relances ---
+
+    // Seuil lu depuis l'API (tracker.RELANCE_APRES_JOURS), jamais recopié ici
+    relanceDays() { return this.stats.relance_apres_jours ?? '…'; },
+
+    // Même sélection que la vue « À relancer » : celle de tracker.jobs_a_relancer
+    isOverdue(job) { return this.relances.some(r => r.job_id === job.id); },
+
     async markFollowedUp(jobId) {
-      await fetch(`/jobs/${jobId}/status?status=followed_up`, { method: 'PATCH' });
+      const res = await fetch(`/jobs/${jobId}/status?status=followed_up`, { method: 'PATCH' });
+      if (!res.ok) { this.notify('Mise à jour du statut impossible', 'error'); return; }
+      const job = this.jobs.find(j => j.id === jobId);
+      if (job) {
+        job.status = 'followed_up';
+        if (this.hiddenInCurrentView('followed_up')) this.removeFromList(jobId);
+      }
+      this.notify('Candidature marquée comme relancée');
       await this.loadRelances();
       await this.loadStats();
     },
 
-    showRecent() {
-      this.activeTab = 'toutes';
-      this.filters = { metier: '', status: '', min_score: 60, age: '7' };
-      this.page = 0;
-      this.load();
-    },
+    // --- Dates : l'API renvoie des dates UTC sans fuseau, on les lit comme telles ---
 
-    applyKpi(kpi) {
-      // Un second clic sur le meme KPI retire le filtre
-      this.filters.status = (this.filters.status === kpi.status) ? '' : kpi.status;
-      // Ces vues doivent montrer toutes les offres concernees, quel que soit le score
-      if (kpi.status) { this.filters.min_score = 0; this.activeTab = 'toutes'; }
-      this.page = 0;
-      this.load();
-    },
-
-    async load() {
-      this.busy = true;
-      const p = new URLSearchParams({
-        min_score: this.filters.min_score,
-        limit: this.limit,
-        offset: this.page * this.limit,
-        ...this.tabParams(),
-      });
-      if (this.filters.metier) p.set('metier', this.filters.metier);
-      if (this.filters.status) p.set('status', this.filters.status);
-      if (this.filters.age) p.set('max_age_days', this.filters.age);
-      if (this.search.trim()) p.set('q', this.search.trim());
-
-      try {
-        const res = await fetch('/jobs?' + p);
-        const data = await res.json();
-        this.jobs = data.items || [];
-      } catch (e) { this.jobs = []; }
-      this.busy = false;
-    },
-
-    async loadStats() {
-      try { this.stats = await (await fetch('/stats')).json(); } catch (e) {}
-    },
-
-    async loadAnalytics() {
-      this.busy = true;
-      try { this.an = await (await fetch('/analytics')).json(); } catch (e) { this.an = null; }
-      this.busy = false;
-    },
-
-    // Largeur de barre proportionnelle a la valeur max de la serie
-    barWidth(value, max) {
-      if (!max) return '0%';
-      return Math.max(2, Math.round(100 * value / max)) + '%';
-    },
-
-    maxOf(list, key) {
-      return list.reduce((m, x) => Math.max(m, x[key] || 0), 0);
-    },
-
-    async loadHistory(jobId) {
-      try { this.history = await (await fetch(`/jobs/${jobId}/history`)).json(); }
-      catch (e) { this.history = []; }
+    parseDate(iso) {
+      if (!iso) return null;
+      return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + 'Z');
     },
 
     formatDate(iso) {
       if (!iso) return '';
-      return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+      return this.parseDate(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
     },
 
-    async loadRelances() {
-      try { this.relances = await (await fetch('/relances')).json(); } catch (e) {}
+    timeAgo(iso) {
+      const d = Math.floor((Date.now() - this.parseDate(iso)) / 86400000);
+      if (d <= 0) return "aujourd'hui";
+      if (d === 1) return 'hier';
+      if (d < 7) return `il y a ${d} jours`;
+      if (d < 30) return `il y a ${Math.floor(d / 7)} sem.`;
+      return `il y a ${Math.floor(d / 30)} mois`;
     },
 
-    showRelances() {
-      if (!this.relances.length) { alert('Aucune candidature à relancer pour le moment.'); return; }
-      alert('À relancer :\n\n' + this.relances.map(r => `• ${r.title} (${r.jours} jours)`).join('\n'));
+    appliedLabel(iso) {
+      if (!iso) return '';
+      const day = this.parseDate(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+      return `Postulé le ${day} · ${this.timeAgo(iso)}`;
     },
 
-    filtersActive() {
-      return this.filters.metier !== '' || this.filters.status !== '' || this.filters.age !== '' || this.search.trim() !== '';
+    // --- Liste ---
+
+    // Une offre sort de la liste courante si son nouveau statut ne correspond plus à la vue
+    hiddenInCurrentView(status) {
+      if (this.filters.status) return status !== this.filters.status;
+      return this.closedStatuses.includes(status);
     },
 
-    resetFilters() {
-      this.filters = { metier: '', status: '', min_score: this.activeTab === 'suisse' ? 40 : 60, age: '' };
-      this.search = '';
-      this.page = 0;
-      this.load();
+    removeFromList(jobId) {
+      const before = this.jobs.length;
+      this.jobs = this.jobs.filter(j => j.id !== jobId);
+      if (this.jobs.length < before) this.total = Math.max(0, this.total - 1);
+      this.home.drafts = this.home.drafts.filter(j => j.id !== jobId);
+      this.home.top = this.home.top.filter(j => j.id !== jobId);
     },
+
+    async setStatus(job, status) {
+      const res = await fetch(`/jobs/${job.id}/status?status=${status}`, { method: 'PATCH' });
+      if (!res.ok) { this.notify('Mise à jour du statut impossible', 'error'); return; }
+      const updated = await res.json();
+      job.status = status;
+      job.applied_at = updated.applied_at;
+      // Ex. passée en "postulé" : elle quitte la liste, sans tout recharger
+      if (this.hiddenInCurrentView(status)) this.removeFromList(job.id);
+      this.loadStats();
+      this.loadRelances();
+      if (this.modal.open && this.modal.job?.id === job.id) this.loadHistory(job.id);
+    },
+
+    // --- Documents ---
+
+    async loadAttachments() {
+      try { this.attachments = await (await fetch('/attachments')).json(); } catch (e) { this.attachments = []; }
+    },
+
+    async uploadAttachment(event) {
+      const file = event.target.files[0];
+      event.target.value = '';
+      if (!file) return;
+      this.docs = { uploading: true, error: '' };
+      try {
+        if (file.size > 5 * 1024 * 1024) throw new Error('Fichier trop volumineux (5 Mo max)');
+        const form = new FormData();
+        form.append('file', file);
+        const res = await fetch('/attachments', { method: 'POST', body: form });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "échec d'envoi");
+        await this.loadAttachments();
+        this.notify(`« ${data.filename} » ajouté`);
+      } catch (e) { this.docs.error = e.message; }
+      this.docs.uploading = false;
+    },
+
+    async toggleDefault(a) {
+      const res = await fetch(`/attachments/${a.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_default: !a.is_default }),
+      });
+      if (res.ok) a.is_default = (await res.json()).is_default;
+    },
+
+    async deleteAttachment(a) {
+      const ok = await this.askConfirm({
+        title: `Supprimer « ${a.filename} » ?`,
+        note: 'Le fichier est supprimé définitivement du serveur.',
+        confirmLabel: 'Supprimer', danger: true,
+      });
+      if (!ok) return;
+      const res = await fetch(`/attachments/${a.id}`, { method: 'DELETE' });
+      if (!res.ok) { this.notify('Suppression impossible', 'error'); return; }
+      this.attachments = this.attachments.filter(x => x.id !== a.id);
+      this.modal.attachmentIds = this.modal.attachmentIds.filter(id => id !== String(a.id));
+      this.notify(`« ${a.filename} » supprimé`);
+    },
+
+    formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' o';
+      if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' Ko';
+      return (bytes / 1024 / 1024).toFixed(1) + ' Mo';
+    },
+
+    // --- Confirmation et bandeau (remplacent confirm() et alert()) ---
+
+    askConfirm(options) {
+      return new Promise(resolve => {
+        this.confirmDialog = {
+          open: true, title: '', lines: [], items: [], note: '', confirmLabel: 'Confirmer', danger: false,
+          ...options, resolve,
+        };
+        // Focus sur « Annuler » : Entrée par réflexe ne déclenche pas l'action
+        this.$nextTick(() => this.$refs.confirmCancel?.focus());
+      });
+    },
+
+    closeConfirm(ok) {
+      const resolve = this.confirmDialog.resolve;
+      this.confirmDialog.open = false;
+      this.confirmDialog.resolve = null;
+      if (resolve) resolve(ok);
+    },
+
+    notify(text, kind = 'info') {
+      clearTimeout(this.toast.timer);
+      this.toast = { show: true, text, kind, timer: setTimeout(() => { this.toast.show = false; }, kind === 'error' ? 6000 : 3500) };
+    },
+
+    // --- Badges ---
 
     scoreClass(s) {
       if (s >= 80) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300';
@@ -919,34 +1283,31 @@ function jobhunter() {
     },
 
     zoneLabel(z) {
-      return { P1_IDF: 'Île-de-France', P2_FRONTALIER: 'Frontalier', P3_FRANCE: 'France', P4_SUISSE: 'Suisse' }[z] || '';
+      return { P1_IDF: 'Île-de-France', P2_FRONTALIER: 'Frontalier', P3_FRANCE: 'Reste de la France', P4_SUISSE: 'Suisse' }[z] || '';
     },
 
-    timeAgo(iso) {
-      const d = Math.floor((Date.now() - new Date(iso)) / 86400000);
-      if (d <= 0) return "aujourd'hui";
-      if (d === 1) return 'hier';
-      if (d < 7) return `il y a ${d} jours`;
-      if (d < 30) return `il y a ${Math.floor(d / 7)} sem.`;
-      return `il y a ${Math.floor(d / 30)} mois`;
+    // Largeur de barre proportionnelle à la valeur max de la série
+    barWidth(value, max) {
+      if (!max) return '0%';
+      return Math.max(2, Math.round(100 * value / max)) + '%';
     },
 
-    async setStatus(job, status) {
-      const res = await fetch(`/jobs/${job.id}/status?status=${status}`, { method: 'PATCH' });
-      if (!res.ok) return;
-      job.status = status;
-      // Ex. passée en "postulé" : elle quitte la liste, sans tout recharger
-      if (this.hiddenInCurrentView(status)) this.removeFromList(job.id);
-      this.loadStats();
-      if (this.modal.open && this.modal.job?.id === job.id) this.loadHistory(job.id);
+    maxOf(list, key) {
+      return list.reduce((m, x) => Math.max(m, x[key] || 0), 0);
     },
+
+    // --- Modale de candidature ---
+
+    isEmail(v) { return !!v && /^[^@\s,;<>]+@[^@\s,;<>]+\.[A-Za-z]{2,}$/.test(v.trim()); },
 
     async openDraft(job) {
+      this.navOpen = false;
       this.modal = {
         open: true, job, draft: null, saved: null,
-        to: job.contact_email || '',
+        // contact_email peut contenir une consigne de la source au lieu d'une adresse
+        to: this.isEmail(job.contact_email) ? job.contact_email.trim() : '',
         attachmentIds: this.attachments.filter(a => a.is_default).map(a => String(a.id)),
-        loading: true, saving: false, error: '', message: '',
+        contactSearch: '', loading: true, saving: false, error: '', message: '',
       };
       this.loadHistory(job.id);
       try {
@@ -959,6 +1320,29 @@ function jobhunter() {
         this.loadStats();
       } catch (e) { this.modal.error = e.message; }
       this.modal.loading = false;
+    },
+
+    // Cherche une adresse publiée dans le texte de l'annonce, jamais ailleurs
+    async detectContact() {
+      const job = this.modal.job;
+      this.modal.contactSearch = 'searching';
+      try {
+        const res = await fetch(`/jobs/${job.id}/detect-contact`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'recherche impossible');
+        if (this.modal.job?.id !== job.id) return;
+        if (data.found) {
+          job.contact_email = data.contact_email;
+          if (!this.modal.to.trim()) this.modal.to = data.contact_email;
+          this.modal.contactSearch = 'found';
+          this.notify('Adresse trouvée dans l\'annonce : ' + data.contact_email);
+        } else {
+          this.modal.contactSearch = 'notfound';
+        }
+      } catch (e) {
+        this.modal.contactSearch = '';
+        this.notify('Recherche impossible : ' + e.message, 'error');
+      }
     },
 
     async regenerate() {
@@ -1002,12 +1386,22 @@ function jobhunter() {
       const to = this.modal.to.trim();
       if (!to) return;
       const ids = this.modal.attachmentIds.map(Number);
-      const names = this.attachments.filter(a => ids.includes(a.id)).map(a => '  • ' + a.filename);
-      const resume = `Envoyer cette candidature à ${to} ?\n\n`
-        + `Objet : ${this.modal.draft.subject || ''}\n`
-        + (names.length ? `Pièces jointes :\n${names.join('\n')}` : 'Aucune pièce jointe')
-        + (this.draftModified() ? '\n\nTes corrections seront enregistrées avant l\'envoi.' : '');
-      if (!confirm(resume)) return;
+      const names = this.attachments.filter(a => ids.includes(a.id)).map(a => a.filename);
+      const notes = [];
+      if (!names.length) notes.push('Aucune pièce jointe.');
+      if (this.draftModified()) notes.push("Tes corrections seront enregistrées avant l'envoi.");
+      notes.push("L'envoi est définitif.");
+      const ok = await this.askConfirm({
+        title: 'Envoyer cette candidature ?',
+        lines: [
+          { label: 'Destinataire', value: to },
+          { label: 'Objet', value: this.modal.draft.subject || '' },
+        ],
+        items: names,
+        note: notes.join(' '),
+        confirmLabel: 'Envoyer',
+      });
+      if (!ok) return;
 
       // Le serveur envoie le brouillon enregistré : on sauvegarde d'abord les corrections
       if (this.draftModified() && !(await this.saveDraft())) return;
@@ -1022,26 +1416,37 @@ function jobhunter() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "échec d'envoi");
         this.modal.message = 'Envoyé à ' + data.sent_to;
+        this.notify('Candidature envoyée à ' + data.sent_to);
         this.modal.job.status = 'applied';
         if (this.hiddenInCurrentView('applied')) this.removeFromList(this.modal.job.id);
         this.loadHistory(this.modal.job.id);
         this.loadStats();
+        this.loadRelances();
       } catch (e) { this.modal.error = e.message; }
       this.modal.saving = false;
     },
 
+    // --- Actions globales ---
+
     async refresh() {
       this.busy = true;
-      await fetch('/jobs/refresh', { method: 'POST' });
+      try {
+        const res = await fetch('/jobs/refresh', { method: 'POST' });
+        const data = await res.json();
+        this.notify(res.ok ? `Collecte terminée : ${data.total} nouvelle${data.total > 1 ? 's' : ''} offre${data.total > 1 ? 's' : ''}` : 'Collecte impossible', res.ok ? 'info' : 'error');
+      } catch (e) { this.notify('Collecte impossible', 'error'); }
       await this.loadStats();
-      await this.load();
+      if (this.isListView()) await this.load(); else this.busy = false;
     },
 
     async rescore() {
       this.busy = true;
-      await fetch('/admin/score', { method: 'POST' });
+      try {
+        const res = await fetch('/admin/score', { method: 'POST' });
+        this.notify(res.ok ? 'Scores recalculés' : 'Recalcul impossible', res.ok ? 'info' : 'error');
+      } catch (e) { this.notify('Recalcul impossible', 'error'); }
       await this.loadStats();
-      await this.load();
+      if (this.isListView()) await this.load(); else this.busy = false;
     },
   };
 }
