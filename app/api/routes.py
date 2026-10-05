@@ -1,17 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app.config import settings
-from app.connectors.france_travail import FranceTravailConnector
-from app.db import get_session
-from app.models import Job, JobStatus, Metier, Source, Zone
-from app.services.ingest import run_connector
-from app.services.backfill import backfill_zones_et_metiers
 from app.connectors.adzuna import AdzunaConnector
+from app.connectors.france_travail import FranceTravailConnector
 from app.connectors.imap_alerts import ImapAlertsConnector
+from app.db import get_session
+from app.models import CLOSED_STATUSES, Application, Attachment, Job, JobStatus, Metier, Source, Zone
 from app.services.analytics import analytics, historique_offre
-from app.services.analytics import analytics, historique_offre
+from app.services.attachments import AttachmentError, delete_attachment, save_upload
+from app.services.backfill import backfill_zones_et_metiers
+from app.services.dedup import normalize
+from app.services.generator import GeneratorError, generate_application, generate_batch
+from app.services.ingest import run_connector
 from app.services.scoring import score_all
 from app.services.tracker import (
     TrackerError,
@@ -20,17 +25,7 @@ from app.services.tracker import (
     update_draft,
     update_status,
 )
-from pydantic import BaseModel
-from app.services.tracker import (
-    TrackerError,
-    jobs_a_relancer,
-    send_application,
-    update_draft,
-    update_status,
-)
-from pydantic import BaseModel
-from app.models import Application
-from app.services.generator import GeneratorError, generate_application, generate_batch
+
 router = APIRouter()
 
 
@@ -60,11 +55,16 @@ def list_jobs(
     country: str | None = None,
     q: str | None = None,
     max_age_days: int | None = None,
+    include_closed: bool = False,
     limit: int = Query(default=50, le=200),
     offset: int = 0,
     session: Session = Depends(get_session),
 ) -> dict:
-    """Liste les offres, filtrées et paginées."""
+    """Liste les offres, filtrées et paginées.
+
+    Sans filtre de statut, les offres déjà traitées (postulées, relancées, entretien,
+    refusées, ignorées) sont masquées, sauf si include_closed=true.
+    """
     statement = select(Job).where(Job.score >= min_score)
 
     if source:
@@ -78,18 +78,14 @@ def list_jobs(
     if metier:
         statement = statement.where(Job.metier == metier)
     if status:
+        # Un filtre explicite par statut l'emporte toujours sur le masquage
         statement = statement.where(Job.status == status)
+    elif not include_closed:
+        statement = statement.where(Job.status.not_in(CLOSED_STATUSES))
     if country:
         statement = statement.where(Job.country == country)
 
     if max_age_days:
-        from datetime import datetime, timedelta, timezone
-        limite = datetime.now(timezone.utc) - timedelta(days=max_age_days)
-        # Les dates en base sont naives : on compare sans fuseau
-        statement = statement.where(Job.published_at >= limite.replace(tzinfo=None))
-
-    if max_age_days:
-        from datetime import datetime, timedelta, timezone
         limite = datetime.now(timezone.utc) - timedelta(days=max_age_days)
         # Les dates en base sont naives : on compare sans fuseau
         statement = statement.where(Job.published_at >= limite.replace(tzinfo=None))
@@ -103,7 +99,6 @@ def list_jobs(
     if q and q.strip():
         # Recherche insensible aux accents, sur l'intitule, la societe et la ville.
         # Tous les mots doivent etre presents : "technicien geneve".
-        from app.services.dedup import normalize
         mots = normalize(q).split()
         candidats = session.exec(statement).all()
         jobs = [
@@ -196,10 +191,12 @@ def stats(session: Session = Depends(get_session)) -> dict:
         "par_statut": count_by(lambda j: j.status.value if hasattr(j.status, "value") else j.status),
     }
 
+
 @router.post("/admin/score")
 def run_scoring(only_new: bool = False, session: Session = Depends(get_session)) -> dict:
     """Recalcule le score de toutes les offres."""
     return score_all(session, only_new=only_new)
+
 
 @router.post("/jobs/{job_id}/generate")
 def generate_for_job(
@@ -237,6 +234,7 @@ def run_generate_batch(
     """Génère les candidatures des meilleures offres non encore traitées."""
     return generate_batch(session, min_score=min_score, limit=limit)
 
+
 class DraftUpdate(BaseModel):
     """Corrections apportees par l'utilisateur a un brouillon."""
 
@@ -246,6 +244,7 @@ class DraftUpdate(BaseModel):
 
 class SendRequest(BaseModel):
     to_email: str | None = None
+    attachment_ids: list[int] = []
 
 
 @router.patch("/jobs/{job_id}/status")
@@ -282,73 +281,15 @@ def send_job_application(
     payload: SendRequest | None = None,
     session: Session = Depends(get_session),
 ) -> dict:
-    """Envoie la candidature par mail. Declenche par l'utilisateur uniquement."""
+    """Envoie la candidature par mail. Declenche par l'utilisateur uniquement :
+    cette route n'est appelee que par le bouton "Envoyer par mail", apres confirmation.
+    """
     job = session.get(Job, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Offre introuvable")
+    payload = payload or SendRequest()
     try:
-        return send_application(session, job, payload.to_email if payload else None)
-    except TrackerError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.get("/relances")
-def list_relances(session: Session = Depends(get_session)) -> list[dict]:
-    """Offres postulees depuis plus de 10 jours sans reponse."""
-    return jobs_a_relancer(session)
-
-
-class DraftUpdate(BaseModel):
-    """Corrections apportees par l'utilisateur a un brouillon."""
-
-    subject: str
-    cover_letter: str
-
-
-class SendRequest(BaseModel):
-    to_email: str | None = None
-
-
-@router.patch("/jobs/{job_id}/status")
-def set_status(
-    job_id: int,
-    status: JobStatus,
-    session: Session = Depends(get_session),
-) -> Job:
-    """Change le statut d'une offre : postule, relance, entretien, refuse."""
-    job = session.get(Job, job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Offre introuvable")
-    return update_status(session, job, status)
-
-
-@router.put("/jobs/{job_id}/draft")
-def save_draft(
-    job_id: int,
-    payload: DraftUpdate,
-    session: Session = Depends(get_session),
-) -> Application:
-    """Enregistre les corrections manuelles du brouillon (nouvelle version)."""
-    if not session.get(Job, job_id):
-        raise HTTPException(status_code=404, detail="Offre introuvable")
-    try:
-        return update_draft(session, job_id, payload.subject, payload.cover_letter)
-    except TrackerError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.post("/jobs/{job_id}/send")
-def send_job_application(
-    job_id: int,
-    payload: SendRequest | None = None,
-    session: Session = Depends(get_session),
-) -> dict:
-    """Envoie la candidature par mail. Declenche par l'utilisateur uniquement."""
-    job = session.get(Job, job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Offre introuvable")
-    try:
-        return send_application(session, job, payload.to_email if payload else None)
+        return send_application(session, job, payload.to_email, payload.attachment_ids)
     except TrackerError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -373,15 +314,54 @@ def get_history(job_id: int, session: Session = Depends(get_session)) -> list[di
     return historique_offre(session, job_id)
 
 
-@router.get("/analytics")
-def get_analytics(session: Session = Depends(get_session)) -> dict:
-    """Metriques de suivi : entonnoir, sources, activite hebdomadaire."""
-    return analytics(session)
+# --- Pièces jointes (CV, lettres...) ---
 
 
-@router.get("/jobs/{job_id}/history")
-def get_history(job_id: int, session: Session = Depends(get_session)) -> list[dict]:
-    """Chronologie des changements de statut d'une offre."""
-    if not session.get(Job, job_id):
-        raise HTTPException(status_code=404, detail="Offre introuvable")
-    return historique_offre(session, job_id)
+class AttachmentUpdate(BaseModel):
+    """Sans valeur explicite, is_default est inversé."""
+
+    is_default: bool | None = None
+
+
+@router.get("/attachments")
+def list_attachments(session: Session = Depends(get_session)) -> list[Attachment]:
+    """Documents téléversés, les plus récents d'abord."""
+    return session.exec(select(Attachment).order_by(Attachment.created_at.desc())).all()
+
+
+@router.post("/attachments", status_code=201)
+async def upload_attachment(file: UploadFile, session: Session = Depends(get_session)) -> Attachment:
+    """Téléverse un document (5 Mo max, pdf/docx/odt/png/jpg)."""
+    try:
+        return await save_upload(session, file)
+    except AttachmentError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@router.patch("/attachments/{attachment_id}")
+def update_attachment(
+    attachment_id: int,
+    payload: AttachmentUpdate | None = None,
+    session: Session = Depends(get_session),
+) -> Attachment:
+    """Marque (ou démarque) un document comme joint par défaut aux candidatures."""
+    attachment = session.get(Attachment, attachment_id)
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Document introuvable")
+    if payload is None or payload.is_default is None:
+        attachment.is_default = not attachment.is_default
+    else:
+        attachment.is_default = payload.is_default
+    session.add(attachment)
+    session.commit()
+    session.refresh(attachment)
+    return attachment
+
+
+@router.delete("/attachments/{attachment_id}", status_code=204)
+def remove_attachment(attachment_id: int, session: Session = Depends(get_session)) -> None:
+    """Supprime le document et son fichier."""
+    attachment = session.get(Attachment, attachment_id)
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Document introuvable")
+    delete_attachment(session, attachment)

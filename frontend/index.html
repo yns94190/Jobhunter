@@ -48,7 +48,7 @@
 
     <div class="px-3 mt-6">
       <div class="text-[11px] uppercase tracking-wider text-slate-400 px-3 mb-2">Suivi</div>
-      <button @click="filters.status = 'applied'; load()"
+      <button @click="showApplications()"
         class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800">
         <span>📮</span><span>Candidatures</span>
         <span class="ml-auto text-[11px] px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800" x-text="stats.par_statut?.applied || 0"></span>
@@ -60,6 +60,35 @@
           :class="relances.length ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' : 'bg-slate-100 dark:bg-slate-800'"
           x-text="relances.length"></span>
       </button>
+    </div>
+
+    <div class="px-3 mt-6 min-h-0 flex flex-col">
+      <div class="flex items-center px-3 mb-2">
+        <span class="text-[11px] uppercase tracking-wider text-slate-400">Mes documents</span>
+        <label class="ml-auto text-xs text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+          :class="docs.uploading && 'opacity-50 pointer-events-none'">
+          <span x-text="docs.uploading ? 'Envoi...' : '+ Ajouter'"></span>
+          <input type="file" class="hidden" accept=".pdf,.docx,.odt,.png,.jpg"
+            @change="uploadAttachment($event)">
+        </label>
+      </div>
+      <p x-show="docs.error" x-text="docs.error" class="px-3 mb-1 text-[11px] text-red-600"></p>
+      <div class="space-y-0.5 overflow-y-auto">
+        <template x-for="a in attachments" :key="a.id">
+          <div class="group flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
+            <button @click="toggleDefault(a)"
+              :title="a.is_default ? 'Joint par défaut — cliquer pour retirer' : 'Joindre par défaut aux candidatures'"
+              :class="a.is_default ? 'text-amber-500' : 'text-slate-300 dark:text-slate-600 hover:text-amber-400'"
+              x-text="a.is_default ? '★' : '☆'"></button>
+            <span class="truncate flex-1 text-slate-600 dark:text-slate-400" :title="a.filename + ' · ' + formatSize(a.size)" x-text="a.filename"></span>
+            <button @click="deleteAttachment(a)" title="Supprimer"
+              class="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition">✕</button>
+          </div>
+        </template>
+        <p x-show="attachments.length === 0" class="px-3 text-[11px] text-slate-400">
+          CV, lettre... (pdf, docx, odt, png, jpg — 5 Mo max)
+        </p>
+      </div>
     </div>
 
     <div class="mt-auto p-3 space-y-2">
@@ -165,17 +194,6 @@
           <option value="30">Ce mois-ci</option>
         </select>
 
-        <select x-model="filters.age" @change="load()"
-          class="px-3 py-2 rounded-xl border outline-none transition"
-          :class="filters.age ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 font-medium' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'">
-          <option value="">Toutes les dates</option>
-          <option value="1">Aujourd'hui</option>
-          <option value="3">3 derniers jours</option>
-          <option value="7">Cette semaine</option>
-          <option value="14">2 dernières semaines</option>
-          <option value="30">Ce mois-ci</option>
-        </select>
-
         <div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
           <span class="text-slate-400 text-xs">Score ≥</span>
           <input type="range" x-model.number="filters.min_score" @change="load()" min="0" max="90" step="5" class="w-24 accent-indigo-600">
@@ -198,10 +216,6 @@
             <button @click="refresh()" :disabled="busy"
               class="px-4 py-2 text-sm rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur font-medium disabled:opacity-50">
               Collecter les nouvelles offres
-            </button>
-            <button @click="showRecent()"
-              class="px-4 py-2 text-sm rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur font-medium">
-              Offres de la semaine
             </button>
             <button @click="showRecent()"
               class="px-4 py-2 text-sm rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur font-medium">
@@ -544,6 +558,31 @@
               class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-indigo-400 outline-none leading-relaxed"></textarea>
           </div>
 
+          <div class="grid sm:grid-cols-2 gap-4 pt-2 border-t border-slate-200 dark:border-slate-800">
+            <div>
+              <label class="block text-sm font-medium mb-1.5">Destinataire</label>
+              <input type="email" x-model="modal.to" placeholder="adresse@entreprise.fr"
+                class="w-full px-3.5 py-2.5 text-sm rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-indigo-400 outline-none">
+              <p class="text-[11px] text-slate-400 mt-1"
+                x-text="modal.job?.contact_email ? 'Pré-rempli depuis l\'offre, modifiable' : 'Aucune adresse dans l\'offre : à saisir'"></p>
+            </div>
+            <div>
+              <p class="text-sm font-medium mb-1.5">Pièces jointes</p>
+              <div class="space-y-1">
+                <template x-for="a in attachments" :key="a.id">
+                  <label class="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" :value="String(a.id)" x-model="modal.attachmentIds" class="accent-indigo-600">
+                    <span class="truncate" x-text="a.filename"></span>
+                    <span class="text-[11px] text-slate-400 shrink-0" x-text="formatSize(a.size)"></span>
+                  </label>
+                </template>
+                <p x-show="attachments.length === 0" class="text-xs text-slate-400">
+                  Aucun document : ajoute ton CV dans « Mes documents ».
+                </p>
+              </div>
+            </div>
+          </div>
+
 
           <div x-show="history.length > 0" class="pt-2 border-t border-slate-200 dark:border-slate-800">
             <p class="text-sm font-medium mb-2">Historique</p>
@@ -577,9 +616,9 @@
         class="px-4 py-2.5 text-sm rounded-xl bg-slate-800 dark:bg-slate-700 text-white font-medium hover:bg-slate-900 disabled:opacity-50">
         Enregistrer mes corrections
       </button>
-      <button @click="sendMail()" :disabled="modal.saving || !modal.job?.contact_email"
+      <button @click="sendMail()" :disabled="modal.saving || !modal.to.trim()"
         class="px-4 py-2.5 text-sm rounded-xl bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-40"
-        :title="modal.job?.contact_email || 'Aucune adresse de contact'">
+        :title="modal.to.trim() || 'Saisir un destinataire'">
         Envoyer par mail
       </button>
       <a :href="modal.job?.url" target="_blank" rel="noopener"
@@ -599,7 +638,10 @@ function jobhunter() {
     dark: localStorage.getItem('jh_dark') === 'true',
     activeTab: 'home',
     filters: { metier: '', status: '', min_score: 60, age: '' },
-    modal: { open: false, job: null, draft: null, loading: false, saving: false, error: '', message: '' },
+    modal: { open: false, job: null, draft: null, saved: null, to: '', attachmentIds: [], loading: false, saving: false, error: '', message: '' },
+    attachments: [], docs: { uploading: false, error: '' },
+    // Statuts masqués des onglets (même liste que CLOSED_STATUSES côté API)
+    closedStatuses: ['applied', 'followed_up', 'interview', 'rejected', 'ignored'],
 
     tabs: [
       { id: 'home',       label: 'Accueil',    icon: '🏠' },
@@ -614,6 +656,72 @@ function jobhunter() {
       await this.loadStats();
       await this.loadRelances();
       await this.loadHome();
+      await this.loadAttachments();
+    },
+
+    showApplications() {
+      this.activeTab = 'toutes';
+      this.filters = { metier: '', status: 'applied', min_score: 0, age: '' };
+      this.search = '';
+      this.page = 0;
+      this.load();
+    },
+
+    // Une offre sort de la liste courante si son nouveau statut ne correspond plus à la vue
+    hiddenInCurrentView(status) {
+      if (this.filters.status) return status !== this.filters.status;
+      return this.closedStatuses.includes(status);
+    },
+
+    removeFromList(jobId) {
+      this.jobs = this.jobs.filter(j => j.id !== jobId);
+      this.home.drafts = this.home.drafts.filter(j => j.id !== jobId);
+      this.home.top = this.home.top.filter(j => j.id !== jobId);
+    },
+
+    async loadAttachments() {
+      try { this.attachments = await (await fetch('/attachments')).json(); } catch (e) { this.attachments = []; }
+    },
+
+    async uploadAttachment(event) {
+      const file = event.target.files[0];
+      event.target.value = '';
+      if (!file) return;
+      this.docs = { uploading: true, error: '' };
+      try {
+        if (file.size > 5 * 1024 * 1024) throw new Error('Fichier trop volumineux (5 Mo max)');
+        const form = new FormData();
+        form.append('file', file);
+        const res = await fetch('/attachments', { method: 'POST', body: form });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "échec d'envoi");
+        await this.loadAttachments();
+      } catch (e) { this.docs.error = e.message; }
+      this.docs.uploading = false;
+    },
+
+    async toggleDefault(a) {
+      const res = await fetch(`/attachments/${a.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_default: !a.is_default }),
+      });
+      if (res.ok) a.is_default = (await res.json()).is_default;
+    },
+
+    async deleteAttachment(a) {
+      if (!confirm(`Supprimer « ${a.filename} » ?`)) return;
+      const res = await fetch(`/attachments/${a.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        this.attachments = this.attachments.filter(x => x.id !== a.id);
+        this.modal.attachmentIds = this.modal.attachmentIds.filter(id => id !== String(a.id));
+      }
+    },
+
+    formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' o';
+      if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' Ko';
+      return (bytes / 1024 / 1024).toFixed(1) + ' Mo';
     },
 
     async loadHome() {
@@ -697,13 +805,6 @@ function jobhunter() {
       this.load();
     },
 
-    showRecent() {
-      this.activeTab = 'toutes';
-      this.filters = { metier: '', status: '', min_score: 60, age: '7' };
-      this.page = 0;
-      this.load();
-    },
-
     applyKpi(kpi) {
       // Un second clic sur le meme KPI retire le filtre
       this.filters.status = (this.filters.status === kpi.status) ? '' : kpi.status;
@@ -723,8 +824,6 @@ function jobhunter() {
       });
       if (this.filters.metier) p.set('metier', this.filters.metier);
       if (this.filters.status) p.set('status', this.filters.status);
-      if (this.filters.age) p.set('max_age_days', this.filters.age);
-      if (this.search.trim()) p.set('q', this.search.trim());
       if (this.filters.age) p.set('max_age_days', this.filters.age);
       if (this.search.trim()) p.set('q', this.search.trim());
 
@@ -833,21 +932,30 @@ function jobhunter() {
     },
 
     async setStatus(job, status) {
-      await fetch(`/jobs/${job.id}/status?status=${status}`, { method: 'PATCH' });
+      const res = await fetch(`/jobs/${job.id}/status?status=${status}`, { method: 'PATCH' });
+      if (!res.ok) return;
       job.status = status;
+      // Ex. passée en "postulé" : elle quitte la liste, sans tout recharger
+      if (this.hiddenInCurrentView(status)) this.removeFromList(job.id);
       this.loadStats();
       if (this.modal.open && this.modal.job?.id === job.id) this.loadHistory(job.id);
     },
 
     async openDraft(job) {
-      this.modal = { open: true, job, draft: null, loading: true, saving: false, error: '', message: '' };
+      this.modal = {
+        open: true, job, draft: null, saved: null,
+        to: job.contact_email || '',
+        attachmentIds: this.attachments.filter(a => a.is_default).map(a => String(a.id)),
+        loading: true, saving: false, error: '', message: '',
+      };
       this.loadHistory(job.id);
       try {
         const res = await fetch(`/jobs/${job.id}/generate`, { method: 'POST' });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'échec de génération');
         this.modal.draft = data;
-        job.status = 'drafted';
+        this.modal.saved = { subject: data.subject, cover_letter: data.cover_letter };
+        if (job.status === 'new') job.status = 'drafted';
         this.loadStats();
       } catch (e) { this.modal.error = e.message; }
       this.modal.loading = false;
@@ -860,6 +968,7 @@ function jobhunter() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'échec de génération');
         this.modal.draft = data;
+        this.modal.saved = { subject: data.subject, cover_letter: data.cover_letter };
         this.modal.message = 'Nouvelle version générée';
       } catch (e) { this.modal.error = e.message; }
       this.modal.loading = false;
@@ -876,24 +985,46 @@ function jobhunter() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "échec d'enregistrement");
         this.modal.draft = data;
+        this.modal.saved = { subject: data.subject, cover_letter: data.cover_letter };
         this.modal.message = `Corrections enregistrées (v${data.version})`;
-      } catch (e) { this.modal.error = e.message; }
-      this.modal.saving = false;
+        return true;
+      } catch (e) { this.modal.error = e.message; return false; }
+      finally { this.modal.saving = false; }
     },
 
+    draftModified() {
+      const d = this.modal.draft, s = this.modal.saved;
+      return !!d && (!s || d.subject !== s.subject || d.cover_letter !== s.cover_letter);
+    },
+
+    // Seul point d'envoi : clic sur "Envoyer par mail", puis confirmation explicite
     async sendMail() {
-      if (!confirm(`Envoyer cette candidature à ${this.modal.job.contact_email} ?`)) return;
-      this.modal.saving = true; this.modal.error = '';
+      const to = this.modal.to.trim();
+      if (!to) return;
+      const ids = this.modal.attachmentIds.map(Number);
+      const names = this.attachments.filter(a => ids.includes(a.id)).map(a => '  • ' + a.filename);
+      const resume = `Envoyer cette candidature à ${to} ?\n\n`
+        + `Objet : ${this.modal.draft.subject || ''}\n`
+        + (names.length ? `Pièces jointes :\n${names.join('\n')}` : 'Aucune pièce jointe')
+        + (this.draftModified() ? '\n\nTes corrections seront enregistrées avant l\'envoi.' : '');
+      if (!confirm(resume)) return;
+
+      // Le serveur envoie le brouillon enregistré : on sauvegarde d'abord les corrections
+      if (this.draftModified() && !(await this.saveDraft())) return;
+
+      this.modal.saving = true; this.modal.error = ''; this.modal.message = '';
       try {
         const res = await fetch(`/jobs/${this.modal.job.id}/send`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ to_email: to, attachment_ids: ids }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "échec d'envoi");
         this.modal.message = 'Envoyé à ' + data.sent_to;
         this.modal.job.status = 'applied';
+        if (this.hiddenInCurrentView('applied')) this.removeFromList(this.modal.job.id);
+        this.loadHistory(this.modal.job.id);
         this.loadStats();
       } catch (e) { this.modal.error = e.message; }
       this.modal.saving = false;

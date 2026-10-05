@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import smtplib
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -8,12 +9,16 @@ from email.message import EmailMessage
 from sqlmodel import Session, select
 
 from app.config import settings
-from app.models import Application, Job, JobStatus
+from app.models import Application, Attachment, Job, JobStatus
 from app.models_history import StatusHistory
+from app.services.attachments import AttachmentError, read_bytes
 
 logger = logging.getLogger(__name__)
 
 RELANCE_APRES_JOURS = 10
+
+# Controle volontairement simple : une seule adresse, sans espace ni retour a la ligne
+EMAIL_RE = re.compile(r"[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+")
 
 
 class TrackerError(RuntimeError):
@@ -73,14 +78,39 @@ def update_draft(session: Session, job_id: int, subject: str, cover_letter: str)
     return revised
 
 
-def send_application(session: Session, job: Job, to_email: str | None = None) -> dict:
-    """Envoie la candidature par SMTP. L'utilisateur declenche, jamais le systeme."""
-    if not (settings.smtp_host and settings.smtp_user and settings.smtp_password):
-        raise TrackerError("configuration SMTP incomplete")
+def _check_smtp_config() -> None:
+    """Refuse l'envoi si une variable SMTP manque, en nommant lesquelles."""
+    manquantes = [
+        nom
+        for nom, valeur in (
+            ("SMTP_HOST", settings.smtp_host),
+            ("SMTP_USER", settings.smtp_user),
+            ("SMTP_PASSWORD", settings.smtp_password),
+        )
+        if not valeur
+    ]
+    if manquantes:
+        raise TrackerError("configuration SMTP incomplete : " + ", ".join(manquantes) + " manquant(s) dans .env")
 
-    destinataire = to_email or job.contact_email
+
+def send_application(
+    session: Session,
+    job: Job,
+    to_email: str | None = None,
+    attachment_ids: list[int] | None = None,
+) -> dict:
+    """Envoie la candidature par SMTP. L'utilisateur declenche, jamais le systeme.
+
+    Aucune tache planifiee ne doit appeler cette fonction : seule la route
+    POST /jobs/{id}/send, declenchee par un clic confirme, l'utilise.
+    """
+    _check_smtp_config()
+
+    destinataire = (to_email or job.contact_email or "").strip()
     if not destinataire:
-        raise TrackerError("aucune adresse de contact pour cette offre")
+        raise TrackerError("aucune adresse de destinataire")
+    if not EMAIL_RE.fullmatch(destinataire):
+        raise TrackerError(f"adresse de destinataire invalide : {destinataire}")
 
     application = session.exec(
         select(Application)
@@ -90,26 +120,56 @@ def send_application(session: Session, job: Job, to_email: str | None = None) ->
     if not application:
         raise TrackerError("aucun brouillon courant")
 
+    # Toutes les pieces jointes sont chargees avant d'ouvrir la connexion SMTP
+    pieces = []
+    for attachment_id in dict.fromkeys(attachment_ids or []):  # sans doublons, ordre conserve
+        attachment = session.get(Attachment, attachment_id)
+        if not attachment:
+            raise TrackerError(f"piece jointe introuvable : {attachment_id}")
+        try:
+            pieces.append((attachment, read_bytes(attachment)))
+        except AttachmentError as exc:
+            raise TrackerError(str(exc)) from exc
+
+    expediteur = settings.smtp_from or settings.smtp_user
+
     message = EmailMessage()
-    message["From"] = settings.smtp_user
+    message["From"] = expediteur
+    message["Reply-To"] = expediteur
     message["To"] = destinataire
     message["Subject"] = application.subject or f"Candidature - {job.title}"
     message.set_content(application.cover_letter or "")
 
+    for attachment, contenu in pieces:
+        maintype, _, subtype = attachment.content_type.partition("/")
+        message.add_attachment(contenu, maintype=maintype, subtype=subtype, filename=attachment.filename)
+
     try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as smtp:
-            smtp.starttls()
+        # Port 465 : TLS des la connexion ; sinon STARTTLS (587)
+        smtp_cls = smtplib.SMTP_SSL if settings.smtp_port == 465 else smtplib.SMTP
+        with smtp_cls(settings.smtp_host, settings.smtp_port, timeout=30) as smtp:
+            if smtp_cls is smtplib.SMTP:
+                smtp.starttls()
             smtp.login(settings.smtp_user, settings.smtp_password)
-            smtp.send_message(message)
+            # Enveloppe : le compte authentifie ; en-tete From : SMTP_FROM
+            smtp.send_message(message, from_addr=settings.smtp_user, to_addrs=[destinataire])
     except Exception as exc:
         raise TrackerError(f"envoi echoue : {exc}") from exc
 
     application.sent_at = datetime.now(timezone.utc)
     session.add(application)
-    update_status(session, job, JobStatus.APPLIED)
+    update_status(session, job, JobStatus.APPLIED, note=f"envoye par mail a {destinataire}")
 
-    logger.info("Candidature envoyee pour l'offre %s a %s", job.id, destinataire)
-    return {"sent_to": destinataire, "job_id": job.id, "version": application.version}
+    logger.info(
+        "Candidature envoyee pour l'offre %s a %s (%d piece(s) jointe(s))",
+        job.id, destinataire, len(pieces),
+    )
+    return {
+        "sent_to": destinataire,
+        "job_id": job.id,
+        "version": application.version,
+        "attachments": [a.filename for a, _ in pieces],
+    }
 
 
 def jobs_a_relancer(session: Session) -> list[dict]:
